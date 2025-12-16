@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, handle, body_html, images, options, variants, taxable, trackQuantity, collectionIds, storeId } = body;
+    const { title, handle, body_html, vendor, images, options, variants, taxable, trackQuantity, collectionIds, storeId, status, published } = body;
 
     if (!storeId) {
       return NextResponse.json({ error: 'Store ID is required' }, { status: 400 });
@@ -38,16 +38,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Construct the product data for Shopify
-    const productData: any = {
+    const productData: { product: { title: string; handle?: string; body_html?: string; vendor: string; product_type: string; status: string; published?: boolean; published_scope: string | null; images: Array<{ src: string; alt: string }>; options?: Array<{ name: string; values: string[] }>; variants?: Array<Record<string, unknown>> } } = {
       product: {
         title,
         handle,
         body_html,
-        vendor: 'Imported',
+        vendor: vendor || 'Imported',
         product_type: 'Fashion',
-        status: 'active', // Publish product automatically
-        published_scope: 'web', // Make it available on all sales channels
-        images: images.map((img: any) => ({
+        status: status || 'active',
+        published: published !== undefined ? published : true,
+        published_scope: published ? 'web' : null,
+        images: images.map((img: { src: string; alt?: string }) => ({
           src: img.src,
           alt: img.alt || title,
         })),
@@ -56,14 +57,14 @@ export async function POST(request: NextRequest) {
 
     // Add options if they exist
     if (options && options.length > 0) {
-      productData.product.options = options.map((opt: any) => ({
+      productData.product.options = options.map((opt: { name: string; values: string[] }) => ({
         name: opt.name,
         values: opt.values,
       }));
 
       // Add variants with proper option mapping
-      productData.product.variants = variants.map((variant: any) => {
-        const variantData: any = {
+      productData.product.variants = variants.map((variant: { price: string; compare_at_price?: string; sku?: string; barcode?: string; inventory_quantity?: number; [key: string]: unknown }) => {
+        const variantData: Record<string, unknown> = {
           price: variant.price,
           compare_at_price: variant.compare_at_price || null,
           sku: variant.sku || '',
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
       
       // Build image ID mapping from original images to created images
       const imageMapping = new Map();
-      images.forEach((originalImg: any, index: number) => {
+      images.forEach((originalImg: { id?: string; src?: string; [key: string]: unknown }, index: number) => {
         if (createdImages[index]) {
           console.log(`Mapping image: ${originalImg.id} -> ${createdImages[index].id}`);
           imageMapping.set(originalImg.id, createdImages[index].id);

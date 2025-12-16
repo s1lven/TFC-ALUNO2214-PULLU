@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch all products in the collection (with pagination)
-    const products: any[] = [];
+    const products: unknown[] = [];
     let page = 1;
     let hasMore = true;
 

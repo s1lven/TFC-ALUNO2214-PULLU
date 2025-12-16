@@ -2,14 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { HomeIcon, Sparkles, ShoppingBag } from 'lucide-react'
+import { ShoppingBag } from 'lucide-react'
 
 export default function DashboardNav() {
   const pathname = usePathname()
 
   const navItems = [
-    { href: '/dashboard', label: 'Home', icon: HomeIcon },
-    { href: '/dashboard/create-shot', label: 'Create Shot', icon: Sparkles },
+    // { href: '/dashboard', label: 'Home', icon: HomeIcon },
+    // { href: '/dashboard/create-shot', label: 'Create Shot', icon: Sparkles },
     { href: '/dashboard/product-listing', label: 'Product Listing', icon: ShoppingBag },
   ]
 

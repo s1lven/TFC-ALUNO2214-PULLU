@@ -54,7 +54,7 @@ export default function GuidePage() {
                   </code>
                 </div>
                 <p className="text-neutral-400 text-sm">
-                  💡 You can find this in your browser's address bar when you're logged into your Shopify admin.
+                  💡 You can find this in your browser&apos;s address bar when you&apos;re logged into your Shopify admin.
                 </p>
               </div>
             </div>
@@ -93,7 +93,7 @@ export default function GuidePage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-green-400 mt-1">•</span>
-                    <span>Give it a name (e.g., "Product Importer")</span>
+                    <span>Give it a name (e.g., &quot;Product Importer&quot;)</span>
                   </li>
                 </ol>
               </div>
@@ -181,7 +181,7 @@ export default function GuidePage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-green-400 mt-1">•</span>
-                    <span>After installation, you'll see the <strong className="text-white">Admin API access token</strong></span>
+                    <span>After installation, you&apos;ll see the <strong className="text-white">Admin API access token</strong></span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-green-400 mt-1">•</span>
@@ -192,7 +192,7 @@ export default function GuidePage() {
                   <p className="text-amber-400 text-sm flex items-start gap-2">
                     <span className="text-lg">⚠️</span>
                     <span>
-                      <strong>Important:</strong> Save this token somewhere safe! Shopify will only show it once. If you lose it, you'll need to generate a new one.
+                      <strong>Important:</strong> Save this token somewhere safe! Shopify will only show it once. If you lose it, you&apos;ll need to generate a new one.
                     </span>
                   </p>
                 </div>
@@ -236,7 +236,7 @@ export default function GuidePage() {
               <div>
                 <h3 className="text-lg font-semibold text-white mb-2">Need More Help?</h3>
                 <p className="text-neutral-300 mb-4">
-                  If you're having trouble, check out Shopify's official documentation or contact our support team.
+                  If you&apos;re having trouble, check out Shopify&apos;s official documentation or contact our support team.
                 </p>
                 <a
                   href="https://help.shopify.com/en/manual/apps/app-types/custom-apps"

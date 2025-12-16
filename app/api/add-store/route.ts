@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
 
       if (scopesResponse.ok) {
         const scopesData = await scopesResponse.json();
-        const grantedScopes = scopesData.access_scopes?.map((scope: any) => scope.handle) || [];
+        const grantedScopes = scopesData.access_scopes?.map((scope: { handle: string }) => scope.handle) || [];
         
         // Required scopes for the app to function
         const requiredScopes = [
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
         // If we can't check scopes, show a warning but don't block
         console.warn('Could not verify API scopes for store');
       }
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Failed to validate store credentials. Please check your store URL and access token.' },
         { status: 400 }

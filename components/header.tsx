@@ -1,6 +1,14 @@
 'use client'
 
 import { League_Spartan } from "next/font/google"
+
+declare global {
+  interface Window {
+    umami?: {
+      track: (event: string, data?: Record<string, unknown>) => void;
+    };
+  }
+}
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -91,10 +99,10 @@ export default function Header() {
           </Link>
           
           <nav className="hidden md:flex items-center gap-6">
-            <button onClick={() => scrollToSection('blog')} className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium cursor-pointer">Blog</button>
+            <Link href="/blog" className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium cursor-pointer">Blog</Link>
             <button onClick={() => scrollToSection('pricing')} className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium cursor-pointer">Pricing</button>
-            <button onClick={() => scrollToSection('faq')} className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium cursor-pointer">FAQ's</button>
-            <button onClick={() => scrollToSection('contact')} className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium cursor-pointer">Contact</button>
+            <button onClick={() => scrollToSection('faq')} className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium cursor-pointer">FAQ&apos;s</button>
+            <Link href="/contact" className="text-gray-600 hover:text-gray-900 transition-colors text-sm font-medium cursor-pointer">Contact</Link>
           </nav>
 
           <div className="flex items-center gap-3">

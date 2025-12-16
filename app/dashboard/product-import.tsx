@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import RichTextEditor from '@/components/rich-text-editor';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { Download, X, Plus, Languages, Sparkles, Trash2 } from 'lucide-react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Download, X, Plus, Sparkles, Trash2, ArrowLeft } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const languages = [
   { code: 'EN-US', name: 'English' },
@@ -68,9 +68,130 @@ export default function ProductImport({
   setImportStatus,
   setTranslationStatus,
   languageSearch,
-  setLanguageSearch
-}: any) {
+  setLanguageSearch,
+  onBack
+}: {
+  productData: { options?: Array<{ name: string; values: string[] }>; variants?: Array<Record<string, unknown>>; [key: string]: unknown };
+  editableTitle: string;
+  setEditableTitle: React.Dispatch<React.SetStateAction<string>>;
+  editableHandle: string;
+  setEditableHandle: React.Dispatch<React.SetStateAction<string>>;
+  editablePrice: string;
+  setEditablePrice: React.Dispatch<React.SetStateAction<string>>;
+  editableComparePrice: string;
+  setEditableComparePrice: React.Dispatch<React.SetStateAction<string>>;
+  editableDescriptionHtml: string;
+  setEditableDescriptionHtml: React.Dispatch<React.SetStateAction<string>>;
+  editableOptions: Array<{ name: string; values: string[] }>;
+  setEditableOptions: React.Dispatch<React.SetStateAction<Array<{ name: string; values: string[] }>>>;
+  editableVariants: Array<Record<string, unknown>>;
+  setEditableVariants: React.Dispatch<React.SetStateAction<Array<Record<string, unknown>>>>;
+  selectedStore: { id: number; user_id: string; shopify_store_url: string; shopify_token: string; store_name?: string; created_at: string } | null;
+  collections: Array<{ id: string; title: string }>;
+  isTaxable: boolean;
+  setIsTaxable: React.Dispatch<React.SetStateAction<boolean>>;
+  trackStock: boolean;
+  setTrackStock: React.Dispatch<React.SetStateAction<boolean>>;
+  selectedCollections: string[];
+  setSelectedCollections: React.Dispatch<React.SetStateAction<string[]>>;
+  addingToStore: boolean;
+  setAddingToStore: React.Dispatch<React.SetStateAction<boolean>>;
+  translating: string | null;
+  setTranslating: React.Dispatch<React.SetStateAction<string | null>>;
+  setImportStatus: (status: { type: 'success' | 'error'; message: string; [key: string]: unknown } | null) => void;
+  setTranslationStatus: (status: { type: 'success' | 'error'; message: string } | null) => void;
+  languageSearch: string;
+  setLanguageSearch: React.Dispatch<React.SetStateAction<string>>;
+  onBack: () => void;
+}) {
   const [discountPercentage, setDiscountPercentage] = React.useState('0');
+  const [downloadingImages, setDownloadingImages] = React.useState(false);
+  const [enhancementPrompt, setEnhancementPrompt] = React.useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
+  const [editableImages, setEditableImages] = React.useState<Array<{ src: string; [key: string]: unknown }>>([]);
+  const [uploadingImages, setUploadingImages] = React.useState(false);
+  const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null);
+  const [isActive, setIsActive] = React.useState(true);
+  const [isPublished, setIsPublished] = React.useState(true);
+  const [editableVendor, setEditableVendor] = React.useState('Imported');
+
+  // Initialize editable images when productData changes
+  React.useEffect(() => {
+    if (productData?.images && Array.isArray(productData.images)) {
+      setEditableImages(productData.images as Array<{ src: string; [key: string]: unknown }>);
+    }
+  }, [productData]);
+
+  // Reset vendor to "Imported" when productData changes
+  React.useEffect(() => {
+    if (productData) {
+      setEditableVendor('Imported');
+    }
+  }, [productData]);
+
+  // Handle image upload
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingImages(true);
+
+    try {
+      const newImages = [];
+      
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // Convert to base64 data URL
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        newImages.push({
+          id: Date.now() + i, // Temporary ID
+          src: base64,
+          position: editableImages.length + i + 1,
+          alt: file.name
+        });
+      }
+
+      setEditableImages([...editableImages, ...newImages]);
+    } catch (error) {
+      console.error('Failed to upload images:', error);
+    } finally {
+      setUploadingImages(false);
+      // Reset input
+      event.target.value = '';
+    }
+  };
+
+  // Handle drag and drop for reordering
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const newImages = [...editableImages];
+    const draggedImage = newImages[draggedIndex];
+    
+    // Remove from old position
+    newImages.splice(draggedIndex, 1);
+    // Insert at new position
+    newImages.splice(index, 0, draggedImage);
+    
+    setEditableImages(newImages);
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
 
   // Calculate discount when prices change
   React.useEffect(() => {
@@ -99,23 +220,60 @@ export default function ProductImport({
     }
   };
   
+  // Convert image to PNG format
+  const convertImageToPNG = async (imageUrl: string): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'));
+          return;
+        }
+        
+        ctx.drawImage(img, 0, 0);
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to convert image to PNG'));
+          }
+        }, 'image/png');
+      };
+      
+      img.onerror = () => {
+        reject(new Error('Failed to load image'));
+      };
+      
+      img.src = imageUrl;
+    });
+  };
+
   const downloadAllImages = async () => {
-    if (!productData || !productData.images) return;
+    if (!editableImages || editableImages.length === 0) return;
+
+    setDownloadingImages(true);
 
     try {
       const zip = new JSZip();
       const folder = zip.folder('product-images');
 
-      for (let i = 0; i < productData.images.length; i++) {
-        const image = productData.images[i];
+      for (let i = 0; i < editableImages.length; i++) {
+        const image = editableImages[i];
         try {
-          const response = await fetch(image.src);
-          const blob = await response.blob();
-          const extension = image.src.split('.').pop()?.split('?')[0] || 'jpg';
-          const filename = `${editableHandle || 'product'}_${i + 1}.${extension}`;
-          folder?.file(filename, blob);
+          // Convert image to PNG
+          const pngBlob = await convertImageToPNG(image.src);
+          const filename = `${editableHandle || 'product'}_${i + 1}.png`;
+          folder?.file(filename, pngBlob);
         } catch (error) {
-          console.error(`Failed to fetch image ${i + 1}:`, error);
+          console.error(`Failed to convert image ${i + 1}:`, error);
         }
       }
 
@@ -123,6 +281,8 @@ export default function ProductImport({
       saveAs(content, `${editableHandle || 'product'}_images.zip`);
     } catch (error) {
       console.error('Failed to create zip file:', error);
+    } finally {
+      setDownloadingImages(false);
     }
   };
 
@@ -136,12 +296,48 @@ export default function ProductImport({
     setAddingToStore(true);
 
     try {
-      const updatedVariants = editableVariants.map((variant: any) => ({
-        ...variant,
-        price: editablePrice || variant.price,
-        compare_at_price: editableComparePrice || variant.compare_at_price,
-        taxable: isTaxable,
-      }));
+      // Build a mapping of old option values to new option values
+      const optionValueMap: Record<string, Record<string, string>> = {};
+      
+      // Compare original product options with edited options
+      productData.options?.forEach((originalOption: { name: string; values: string[] }, optionIndex: number) => {
+        const editedOption = editableOptions[optionIndex];
+        if (editedOption) {
+          const optionKey = `option${optionIndex + 1}`;
+          optionValueMap[optionKey] = {};
+          
+          originalOption.values.forEach((originalValue: string, valueIndex: number) => {
+            const newValue = editedOption.values[valueIndex];
+            if (newValue) {
+              optionValueMap[optionKey][originalValue] = newValue;
+            }
+          });
+        }
+      });
+      
+      // Apply the mapping to update variant option values
+      const updatedVariants = editableVariants.map((variant: Record<string, unknown>) => {
+        const newVariant: Record<string, unknown> = {
+          ...variant,
+          price: editablePrice || variant.price,
+          compare_at_price: editableComparePrice || variant.compare_at_price,
+          taxable: isTaxable,
+        };
+        
+        // Update option1, option2, option3 with new values if they were changed
+        const typedVariant = variant as Record<string, unknown>;
+        if (typedVariant.option1 && optionValueMap['option1'] && optionValueMap['option1'][typedVariant.option1 as string]) {
+          newVariant.option1 = optionValueMap['option1'][typedVariant.option1 as string];
+        }
+        if (typedVariant.option2 && optionValueMap['option2'] && optionValueMap['option2'][typedVariant.option2 as string]) {
+          newVariant.option2 = optionValueMap['option2'][typedVariant.option2 as string];
+        }
+        if (typedVariant.option3 && optionValueMap['option3'] && optionValueMap['option3'][typedVariant.option3 as string]) {
+          newVariant.option3 = optionValueMap['option3'][typedVariant.option3 as string];
+        }
+        
+        return newVariant;
+      });
 
       const response = await fetch('/api/add-to-shopify', {
         method: 'POST',
@@ -150,13 +346,16 @@ export default function ProductImport({
           title: editableTitle,
           handle: editableHandle,
           body_html: editableDescriptionHtml,
-          images: productData?.images || [],
+          vendor: editableVendor,
+          images: editableImages,
           options: editableOptions,
           variants: updatedVariants,
           taxable: isTaxable,
           trackQuantity: trackStock,
           collectionIds: selectedCollections,
           storeId: selectedStore.id,
+          status: isActive ? 'active' : 'draft',
+          published: isPublished,
         }),
       });
 
@@ -196,76 +395,79 @@ export default function ProductImport({
     }
   };
 
-  const translateText = async (text: string, targetLang: string): Promise<string> => {
-    const response = await fetch('/api/translate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, targetLang }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Translation failed');
-    }
-
-    const data = await response.json();
-    return data.translatedText;
-  };
-
   const translateAll = async (targetLang: string) => {
     setTranslating('all');
     try {
-      if (editableTitle) {
-        const translatedTitle = await translateText(editableTitle, targetLang);
-        setEditableTitle(translatedTitle);
+      // Prepare product data for translation
+      const productData = {
+        title: editableTitle,
+        description: editableDescriptionHtml,
+        options: editableOptions
+      };
+
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          productData, 
+          targetLang,
+          enhancementPrompt: enhancementPrompt || undefined
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Translation failed');
       }
 
-      if (editableDescriptionHtml) {
-        const translatedDesc = await translateText(editableDescriptionHtml, targetLang);
-        setEditableDescriptionHtml(translatedDesc);
+      const data = await response.json();
+      const translatedData = data.translatedData;
+
+      // Update title
+      if (translatedData.title) {
+        setEditableTitle(translatedData.title);
       }
 
-      if (editableOptions.length > 0) {
+      // Update description
+      if (translatedData.description) {
+        setEditableDescriptionHtml(translatedData.description);
+      }
+
+      // Update options and variants
+      if (translatedData.options && translatedData.options.length > 0) {
         const optionMappings: Array<Map<string, string>> = [];
         
-        const translatedOptions = await Promise.all(
-          editableOptions.map(async (option: any, optionIndex: number) => {
-            const translatedName = option.name ? await translateText(option.name, targetLang) : option.name;
-            const valueMapping = new Map<string, string>();
-            const translatedValues = await Promise.all(
-              option.values.map(async (value: string) => {
-                const translated = await translateText(value, targetLang);
-                valueMapping.set(value, translated);
-                return translated;
-              })
-            );
-            
-            optionMappings[optionIndex] = valueMapping;
-            
-            return {
-              ...option,
-              name: translatedName,
-              values: translatedValues,
-            };
-          })
-        );
-        
-        const updatedVariants = editableVariants.map((variant: any) => {
+        // Create mappings for old values to new values
+        translatedData.options?.forEach((translatedOption: { name: string; values: string[] }, index: number) => {
+          const originalOption = editableOptions[index];
+          const valueMapping = new Map<string, string>();
+          
+          originalOption.values.forEach((originalValue: string, valueIndex: number) => {
+            const translatedValue = translatedOption.values[valueIndex];
+            valueMapping.set(originalValue, translatedValue);
+          });
+          
+          optionMappings[index] = valueMapping;
+        });
+
+        // Update variants with new option values
+        const updatedVariants = editableVariants.map((variant: Record<string, unknown>) => {
           const updatedVariant = { ...variant };
           
-          if (variant.option1 && optionMappings[0]) {
-            updatedVariant.option1 = optionMappings[0].get(variant.option1) || variant.option1;
+          const typedVariant = variant as Record<string, unknown>;
+          if (typedVariant.option1 && optionMappings[0]) {
+            updatedVariant.option1 = optionMappings[0].get(typedVariant.option1 as string) || (typedVariant.option1 as string);
           }
-          if (variant.option2 && optionMappings[1]) {
-            updatedVariant.option2 = optionMappings[1].get(variant.option2) || variant.option2;
+          if (typedVariant.option2 && optionMappings[1]) {
+            updatedVariant.option2 = optionMappings[1].get(typedVariant.option2 as string) || (typedVariant.option2 as string);
           }
-          if (variant.option3 && optionMappings[2]) {
-            updatedVariant.option3 = optionMappings[2].get(variant.option3) || variant.option3;
+          if (typedVariant.option3 && optionMappings[2]) {
+            updatedVariant.option3 = optionMappings[2].get(typedVariant.option3 as string) || (typedVariant.option3 as string);
           }
           
           return updatedVariant;
         });
         
-        setEditableOptions(translatedOptions);
+        setEditableOptions(translatedData.options);
         setEditableVariants(updatedVariants);
       }
 
@@ -289,7 +491,7 @@ export default function ProductImport({
   const selectedCollectionNames = selectedCollections.length === 0 
     ? 'No collection' 
     : selectedCollections.length === 1
-    ? collections.find((c: any) => c.id.toString() === selectedCollections[0])?.title || 'No collection'
+    ? collections.find((c: { id: string; title: string }) => c.id.toString() === selectedCollections[0])?.title || 'No collection'
     : `${selectedCollections.length} collections selected`;
 
   const toggleCollection = (collectionId: string) => {
@@ -301,12 +503,24 @@ export default function ProductImport({
   };
 
   return (
-    <div className="w-full max-w-6xl mx-auto">
-      <div className="bg-white rounded-xl w-full h-[calc(100vh-120px)] flex flex-col shadow-lg border border-gray-200">
+    <div className="h-full w-full flex items-center justify-center p-6">
+      <div className="bg-white rounded-xl w-full max-w-6xl flex flex-col shadow-lg border border-gray-200" style={{ maxHeight: 'calc(100vh - 140px)' }}>
         {/* Header with Translation */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Edit your Product before importing</h2>
-          <DropdownMenu onOpenChange={(open) => !open && setLanguageSearch('')}>
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            <ArrowLeft size={16} />
+            Back
+          </button>
+          <DropdownMenu open={isDropdownOpen} onOpenChange={(open) => {
+            setIsDropdownOpen(open);
+            if (!open) {
+              setLanguageSearch('');
+              setEnhancementPrompt('');
+            }
+          }}>
             <DropdownMenuTrigger asChild>
               <Button
                 disabled={translating === 'all'}
@@ -314,28 +528,52 @@ export default function ProductImport({
                 className="bg-purple-100 hover:bg-purple-200 text-purple-700 border-0 h-9 px-4 text-xs font-medium"
               >
                 <Sparkles size={16} className="mr-2" />
-                {translating === 'all' ? 'Translating...' : 'AI Copywrite and Translation'}
+                {translating === 'all' ? 'Processing...' : 'AI Enhance & Translate'}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-white border-gray-200 w-48 p-0">
-              <div className="p-2 border-b border-gray-200 bg-white sticky top-0 z-10">
+            <DropdownMenuContent className="bg-white border-gray-200 w-80 p-0">
+              {/* AI Prompt Section */}
+              <div className="p-4 border-b border-gray-200">
+                <label className="block text-xs font-semibold text-gray-700 mb-2">
+                  AI Enhancement Prompt (Optional)
+                </label>
+                <textarea
+                  value={enhancementPrompt}
+                  onChange={(e) => setEnhancementPrompt(e.target.value)}
+                  placeholder="e.g., Make it more persuasive, add emoji, improve SEO..."
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2 text-xs text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  rows={3}
+                />
+                <p className="text-xs text-gray-500 mt-1.5">
+                  Leave empty to translate only
+                </p>
+              </div>
+
+              {/* Language Selection */}
+              <div className="p-4">
+                <label className="block text-xs font-semibold text-gray-700 mb-2">
+                  Select Language
+                </label>
                 <Input
                   placeholder="Search languages..."
                   value={languageSearch}
                   onChange={(e) => setLanguageSearch(e.target.value)}
-                  className="bg-gray-50 border-gray-300 text-gray-900 h-8 text-xs"
+                  className="bg-gray-50 border-gray-300 text-gray-900 h-8 text-xs mb-2"
                 />
-              </div>
-              <div className="max-h-[250px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
-                {filteredLanguages.map((lang) => (
-                  <DropdownMenuItem
-                    key={lang.code}
-                    onClick={() => translateAll(lang.code)}
-                    className="text-gray-900 hover:bg-purple-50 hover:text-purple-700 cursor-pointer text-sm focus:bg-purple-50 focus:text-purple-700"
-                  >
-                    {lang.name}
-                  </DropdownMenuItem>
-                ))}
+                <div className="max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400 border border-gray-200 rounded-md">
+                  {filteredLanguages.map((lang) => (
+                    <button
+                      key={lang.code}
+                      onClick={() => {
+                        translateAll(lang.code);
+                        setIsDropdownOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-gray-900 hover:bg-purple-50 hover:text-purple-700 cursor-pointer text-sm transition-colors"
+                    >
+                      {lang.name}
+                    </button>
+                  ))}
+                </div>
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -346,7 +584,7 @@ export default function ProductImport({
           <div className="p-6 space-y-6">
             
             {/* TOP SECTION: 2-Column Grid */}
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-6 items-start">
               {/* LEFT COLUMN: Basic Info & Pricing */}
               <div className="space-y-5">
                 {/* Product Title */}
@@ -375,10 +613,8 @@ export default function ProductImport({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Vendor</label>
                   <Input
-                    value={productData?.vendor || ''}
-                    onChange={(e) => {
-                      // This would need to be passed down as a prop if we want to make it editable
-                    }}
+                    value={editableVendor}
+                    onChange={(e) => setEditableVendor(e.target.value)}
                     className="bg-white border-gray-300 text-gray-900 h-10"
                     placeholder="Vendor name"
                   />
@@ -436,46 +672,87 @@ export default function ProductImport({
               </div>
 
               {/* RIGHT COLUMN: Product Images */}
-              {productData.images && productData.images.length > 0 && (
-                <div className="border border-gray-200 rounded-lg pt-4 pl-4 pb-4 bg-gray-50">
-                  <div className="flex items-center justify-between mb-3 pr-4">
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
                     <label className="text-sm font-medium text-gray-700">Product Images</label>
-                    <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => {/* AI edit functionality */}}
-                        className="bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-md px-2 py-1.5 text-xs font-medium transition-colors flex items-center gap-1"
-                      >
-                        <Sparkles size={14} />
-                        Edit with AI
-                      </button>
+                    <p className="text-xs text-gray-500 mt-0.5">Drag to reorder</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* Upload Button */}
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                        disabled={uploadingImages}
+                      />
+                      <div className="text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-300 rounded-md px-2 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 shadow-sm">
+                        {uploadingImages ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-gray-700 border-t-transparent"></div>
+                            <span>Uploading...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={14} />
+                            <span>Upload</span>
+                          </>
+                        )}
+                      </div>
+                    </label>
+                    
+                    {/* Download Button */}
+                    {editableImages && editableImages.length > 0 && (
                       <button 
                         onClick={downloadAllImages}
-                        className="text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-300 rounded-md px-2 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 shadow-sm"
+                        disabled={downloadingImages}
+                        className="text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-300 rounded-md px-2 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Download size={14} />
-                        Download
+                        {downloadingImages ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-gray-700 border-t-transparent"></div>
+                            Downloading...
+                          </>
+                        ) : (
+                          <>
+                            <Download size={14} />
+                            Download All
+                          </>
+                        )}
                       </button>
-                    </div>
+                    )}
                   </div>
-                  <div className="grid grid-cols-3 gap-3 max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400 pr-3">
-                    {productData.images.map((image: any, index: number) => (
-                      <div key={image.id} className="aspect-square rounded-lg border border-gray-200 overflow-hidden relative group">
+                </div>
+                {editableImages && editableImages.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-3 max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
+                    {editableImages.map((image: { src: string; [key: string]: unknown }, index: number) => (
+                      <div
+                        key={image.id as string} 
+                        className={`aspect-square rounded-lg border-2 overflow-hidden relative group cursor-pointer ${
+                          draggedIndex === index ? 'border-green-500 opacity-50' : 'border-gray-200'
+                        }`}
+                        draggable
+                        onDragStart={() => handleDragStart(index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDragEnd={handleDragEnd}
+                      >
                         <img
                           src={image.src}
                           alt={`Product ${index + 1}`}
-                          className="w-full h-full object-cover cursor-pointer"
+                          className="w-full h-full object-cover pointer-events-none"
                         />
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="absolute top-2 right-2 flex gap-1">
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                          <div className="absolute top-2 right-2 flex gap-1 pointer-events-auto">
                             <button
                               onClick={async () => {
-                                // Download single image
+                                // Download single image as PNG
                                 try {
-                                  const response = await fetch(image.src);
-                                  const blob = await response.blob();
-                                  const extension = image.src.split('.').pop()?.split('?')[0] || 'jpg';
-                                  const filename = `${editableHandle || 'product'}_${index + 1}.${extension}`;
-                                  saveAs(blob, filename);
+                                  const pngBlob = await convertImageToPNG(image.src);
+                                  const filename = `${editableHandle || 'product'}_${index + 1}.png`;
+                                  saveAs(pngBlob, filename);
                                 } catch (error) {
                                   console.error('Failed to download image:', error);
                                 }
@@ -487,8 +764,8 @@ export default function ProductImport({
                             </button>
                             <button
                               onClick={() => {
-                                // Delete image functionality
-                                console.log('Delete image:', image.id);
+                                // Delete image from the list
+                                setEditableImages(editableImages.filter((_, i) => i !== index));
                               }}
                               className="bg-black/60 hover:bg-black/80 rounded-md p-1.5 transition-colors"
                               title="Delete image"
@@ -500,8 +777,12 @@ export default function ProductImport({
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
+                    No images available
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Product Description */}
@@ -537,11 +818,11 @@ export default function ProductImport({
               {/* Variant Options */}
               {editableOptions.length > 0 && (
                 <div className="space-y-3 mb-4">
-                  {editableOptions.map((option: any, optionIndex: number) => (
+                  {editableOptions.map((option: { name: string; values: string[] }, optionIndex: number) => (
                     <div key={optionIndex} className="bg-gray-50 border border-gray-200 rounded-lg p-3 relative">
                       <button
                         onClick={() => {
-                          const newOptions = editableOptions.filter((_: any, i: number) => i !== optionIndex);
+                          const newOptions = editableOptions.filter((_, i: number) => i !== optionIndex);
                           setEditableOptions(newOptions);
                         }}
                         className="absolute top-2 right-2 text-gray-400 hover:text-red-400 hover:bg-red-50 rounded-md p-1.5 transition-all"
@@ -582,7 +863,7 @@ export default function ProductImport({
                             <button
                               onClick={() => {
                                 const newOptions = [...editableOptions];
-                                const newValues = newOptions[optionIndex].values.filter((_: any, i: number) => i !== valueIndex);
+                                const newValues = newOptions[optionIndex].values.filter((_, i: number) => i !== valueIndex);
                                 newOptions[optionIndex] = { ...newOptions[optionIndex], values: newValues };
                                 setEditableOptions(newOptions);
                               }}
@@ -619,9 +900,16 @@ export default function ProductImport({
                   <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors">Set product as active</span>
                   <button
                     type="button"
-                    className="relative inline-flex h-5 w-12 items-center rounded-full transition-colors focus:outline-none bg-green-500"
+                    onClick={() => setIsActive(!isActive)}
+                    className={`relative inline-flex h-5 w-12 items-center rounded-full transition-colors focus:outline-none ${
+                      isActive ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
                   >
-                    <span className="inline-block h-3.5 w-6 transform rounded-full bg-white transition-transform translate-x-5" />
+                    <span
+                      className={`inline-block h-3.5 w-6 transform rounded-full bg-white transition-transform ${
+                        isActive ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
                   </button>
                 </label>
                 
@@ -629,9 +917,16 @@ export default function ProductImport({
                   <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors">Publish to Online Store on import</span>
                   <button
                     type="button"
-                    className="relative inline-flex h-5 w-12 items-center rounded-full transition-colors focus:outline-none bg-green-500"
+                    onClick={() => setIsPublished(!isPublished)}
+                    className={`relative inline-flex h-5 w-12 items-center rounded-full transition-colors focus:outline-none ${
+                      isPublished ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
                   >
-                    <span className="inline-block h-3.5 w-6 transform rounded-full bg-white transition-transform translate-x-5" />
+                    <span
+                      className={`inline-block h-3.5 w-6 transform rounded-full bg-white transition-transform ${
+                        isPublished ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
                   </button>
                 </label>
                 
@@ -682,28 +977,31 @@ export default function ProductImport({
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-white border-gray-200 max-h-[300px] overflow-y-auto w-full">
-                      {collections.map((collection: any) => (
-                        <DropdownMenuItem
+                      {collections.map((collection) => (
+                        <div
                           key={collection.id}
                           onClick={(e) => {
                             e.preventDefault();
                             toggleCollection(collection.id.toString());
+                            console.log('Collection clicked:', collection.title, 'Selected:', selectedCollections);
                           }}
-                          className="text-gray-900 hover:bg-gray-50 cursor-pointer flex items-center gap-2"
+                          className="text-gray-900 cursor-pointer flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-gray-100 transition-colors text-sm"
                         >
-                          <div className={`w-4 h-4 border rounded flex items-center justify-center ${
-                            selectedCollections.includes(collection.id.toString())
-                              ? 'bg-blue-600 border-blue-600'
-                              : 'border-gray-300'
-                          }`}>
+                          <div 
+                            className="w-4 h-4 border rounded flex items-center justify-center border-gray-300"
+                            style={{
+                              backgroundColor: selectedCollections.includes(collection.id.toString()) ? '#7cfc5c' : 'white',
+                              borderColor: selectedCollections.includes(collection.id.toString()) ? '#7cfc5c' : '#d1d5db'
+                            }}
+                          >
                             {selectedCollections.includes(collection.id.toString()) && (
-                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#1f2937' }}>
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                               </svg>
                             )}
                           </div>
                           <span>{collection.title}</span>
-                        </DropdownMenuItem>
+                        </div>
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>

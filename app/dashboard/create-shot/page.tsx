@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, Sparkles, Palette, Trash2 } from 'lucide-react'
+import { Upload, Sparkles, Trash2 } from 'lucide-react'
 
 // Custom slider styles
 const sliderStyles = `
@@ -87,10 +87,10 @@ export default function CreateShotPage() {
         console.log('Generation completed:', result.data)
         // Set the generated images from the API response
         if (result.data && result.data.images && result.data.images.length > 0) {
-          setGeneratedImages(result.data.images.map((img: any) => img.url))
+          setGeneratedImages((result.data.images as Array<{ url: string }>).map((img) => img.url))
         } else if (result.images && result.images.length > 0) {
           // Handle direct response format
-          setGeneratedImages(result.images.map((img: any) => img.url))
+          setGeneratedImages((result.images as Array<{ url: string }>).map((img) => img.url))
         }
       } else {
         console.error('Generation failed:', result.message)

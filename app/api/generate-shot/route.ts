@@ -33,10 +33,10 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Hardcoded API key for now (replace with your actual key)
-    const FAL_KEY = "4d636fee-a89a-4b45-8e43-2cb32649f691:8992a884808a68aeacf830248078d420"
+    // Get FAL API key from environment variable
+    const FAL_KEY = process.env.FAL_API_KEY || "4d636fee-a89a-4b45-8e43-2cb32649f691:8992a884808a68aeacf830248078d420"
     
-    if (!FAL_KEY || FAL_KEY === "YOUR_FAL_API_KEY_HERE") {
+    if (!FAL_KEY) {
       return NextResponse.json({
         success: false,
         message: 'FAL API key not configured'

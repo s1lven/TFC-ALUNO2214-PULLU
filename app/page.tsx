@@ -1,5 +1,5 @@
 'use client'
-// import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Header from "@/components/header";
 import { Link } from "lucide-react";
 
@@ -9,30 +9,37 @@ import { Link } from "lucide-react";
 // ];
 
 export default function Home() {
-  // const [visibleNotifications, setVisibleNotifications] = useState<number[]>([]);
-  // const [cycle, setCycle] = useState(0);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // useEffect(() => {
-  //   const showNotifications = () => {
-  //     // Show first notification after 2s
-  //     setTimeout(() => {
-  //       setVisibleNotifications([1]);
-  //     }, 2000);
+  const handleCheckout = async () => {
+    setIsLoading(true);
+    try {
+      const priceId = billingCycle === 'monthly' 
+        ? 'price_1SeN4WL00ORjNEQGY6OFLmiO' 
+        : 'price_1SeN4WL00ORjNEQGZJESOp5I';
 
-  //     // Show second notification after 5s (stacks with first)
-  //     setTimeout(() => {
-  //       setVisibleNotifications([1, 2]);
-  //     }, 5000);
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ priceId }),
+      });
 
-  //     // Clear all and restart cycle after 9s
-  //     setTimeout(() => {
-  //       setVisibleNotifications([]);
-  //       setCycle((prev) => prev + 1);
-  //     }, 9000);
-  //   };
+      const data = await response.json();
 
-  //   showNotifications();
-  // }, [cycle]);
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error('No checkout URL returned');
+        setIsLoading(false);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      setIsLoading(false);
+    }
+  };
 
   return (
     <main className="min-h-screen flex flex-col" style={{ backgroundColor: '#F1F5F2' }}>
@@ -172,7 +179,7 @@ export default function Home() {
               Your manual product listing method<br />is losing you time and money.
             </h2>
             <p className="text-gray-600 text-base sm:text-lg max-w-4xl mx-auto">
-              Don't waste hours manually creating product descriptions, translating content, or editing images. Use our automated workflow to create complete, professional product listings in seconds and save 80%* of your listing time.
+              Don&apos;t waste hours manually creating product descriptions, translating content, or editing images. Use our automated workflow to create complete, professional product listings in seconds and save 80%* of your listing time.
             </p>
           </div>
 
@@ -212,7 +219,7 @@ export default function Home() {
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-3">Paste product link</h3>
                 <p className="text-gray-600 text-sm">
-                  Simply paste any product URL from AliExpress, Temu, or another Shopify store and we'll instantly import all product details, images, and variants.
+                  Simply paste any product URL from AliExpress, Temu, or another Shopify store and we&apos;ll instantly import all product details, images, and variants.
                 </p>
               </div>
             </div>
@@ -326,7 +333,7 @@ export default function Home() {
           {/* Section Heading */}
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
-              Features that <span className="text-gray-400">set us apart</span>
+              Features that set us apart
             </h2>
           </div>
 
@@ -522,8 +529,11 @@ export default function Home() {
                   {/* AI Product Image Generation */}
                   <tr className="border-b border-gray-100">
                     <td className="p-4">
-                      <div className="font-semibold text-gray-900 text-sm">AI Product Image Generation</div>
-                      <div className="text-xs text-gray-500 mt-0.5">Brand your store with AI fashion models.</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900 text-sm">AI Product Image Generation</span>
+                        <span className="px-1.5 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded">BETA</span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">Brand your store with AI-generated product images.</div>
                     </td>
                     <td className="p-4 bg-[#7cfc5c]/10 text-center">
                       <div className="inline-flex items-center justify-center w-6 h-6 bg-green-500 rounded-full">
@@ -576,7 +586,7 @@ export default function Home() {
                         <span className="font-semibold text-gray-900 text-sm">AI Product Videos</span>
                         <span className="px-1.5 py-0.5 text-xs font-semibold bg-yellow-100 text-yellow-800 rounded">BETA</span>
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5">Advertise with AI fashion videos.</div>
+                      <div className="text-xs text-gray-500 mt-0.5">Advertise with AI-generated product videos.</div>
                     </td>
                     <td className="p-4 bg-[#7cfc5c]/10 text-center">
                       <div className="inline-flex items-center justify-center w-6 h-6 bg-green-500 rounded-full">
@@ -604,115 +614,88 @@ export default function Home() {
       </div>
 
       {/* Pricing Section */}
-      <div className="w-full py-16 sm:py-24">
+      <div id="pricing" className="w-full py-16 sm:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Section Heading */}
-          <div className="text-center mb-16">
+          <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
-              Lock in your seat for a <span className="text-gray-400">fair price</span>
+              Simple, transparent pricing
             </h2>
-            <p className="text-gray-600 text-base sm:text-lg max-w-4xl mx-auto">
-              Product research tools lose their edge when used by everybody. Therefore, we will only allow 500 dropshippers to work with us. Lock in your seat now with up to <span className="font-semibold text-gray-900">80% discount!</span>
+            <p className="text-gray-600 text-base sm:text-lg max-w-3xl mx-auto">
+              Start with a 7-day free trial. One plan with everything you need.
             </p>
           </div>
 
-          {/* Pricing Cards */}
-          <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-            {/* Starter Plan */}
-            <div className="bg-white border-2 border-gray-200 rounded-2xl p-8">
-              <h3 className="text-xl font-bold text-gray-900 mb-6">Starter plan</h3>
-              <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-bold text-gray-900">$10</span>
-                  <span className="text-gray-400 line-through">from $49,99</span>
-                </div>
-              </div>
-              <button className="w-full py-3 bg-white border-2 border-gray-900 text-gray-900 font-semibold rounded-lg hover:bg-gray-50 transition-colors mb-8">
-                Get started
+          {/* Billing Toggle */}
+          <div className="flex items-center justify-center mb-10">
+            <div className="relative bg-gray-200 rounded-lg p-1 flex">
+              {/* Sliding background */}
+              <div
+                className="absolute top-1 bottom-1 bg-gray-900 rounded-md transition-all duration-300 ease-in-out"
+                style={{
+                  left: billingCycle === 'monthly' ? '4px' : 'calc(50%)',
+                  width: 'calc(50% - 4px)',
+                }}
+              />
+              
+              <button
+                onClick={() => setBillingCycle('monthly')}
+                className={`relative z-10 px-8 py-2 rounded-md font-medium text-sm transition-colors duration-300 ${
+                  billingCycle === 'monthly' 
+                    ? 'text-white' 
+                    : 'text-gray-700'
+                }`}
+              >
+                Monthly
               </button>
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">2000 credits</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">Pre-set filters to find winners</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">Magic search</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">WhatsApp customer service</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">Access to 5M+ fashion dropshipping ads</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">Access to 550K+ fashion dropshipping products</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">Access to 115K+ fashion dropshipping stores</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">Advanced filters on ads, products, and stores</span>
-                </div>
-              </div>
+              <button
+                onClick={() => setBillingCycle('annual')}
+                className={`relative z-10 px-8 py-2 rounded-md font-medium text-sm transition-colors duration-300 ${
+                  billingCycle === 'annual' 
+                    ? 'text-white' 
+                    : 'text-gray-700'
+                }`}
+              >
+                Annual
+              </button>
             </div>
+          </div>
 
-            {/* Basic Plan - Most Popular */}
-            <div className="bg-white border-2 border-gray-900 rounded-2xl p-8 relative">
-              <div className="absolute top-6 right-6 bg-gray-900 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                Most Popular
+          {/* Pricing Card */}
+          <div className="max-w-md mx-auto">
+            <div className="bg-white border border-gray-200 shadow-lg rounded-2xl p-8 relative">
+              <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-green-500 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-md">
+                7-DAY FREE TRIAL
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-6">Basic plan</h3>
-              <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-bold text-gray-900">$30</span>
-                  <span className="text-gray-400 line-through">from $74,99</span>
+              
+              <div className="mt-4 mb-6 text-center">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">Pro Plan</h3>
+                <div className="flex items-baseline justify-center gap-1 mb-2">
+                  <span className="text-4xl font-bold text-gray-900">
+                    ${billingCycle === 'monthly' ? '29.99' : '24.99'}
+                  </span>
+                  <span className="text-gray-500 text-base">/month</span>
                 </div>
+                {billingCycle === 'annual' && (
+                  <p className="text-sm text-gray-500">
+                    $299.88 billed annually
+                  </p>
+                )}
+                {billingCycle === 'monthly' && (
+                  <p className="text-sm text-gray-500">
+                    Billed monthly
+                  </p>
+                )}
               </div>
-              <button className="w-full py-3 bg-[#7cfc5c] text-gray-900 font-semibold rounded-lg hover:bg-[#6ee84e] transition-colors mb-8">
-                Get started
+
+              <button 
+                onClick={handleCheckout}
+                disabled={isLoading}
+                className="w-full py-3 bg-[#7cfc5c] text-gray-900 font-semibold text-base rounded-lg hover:bg-[#6ee84e] transition-all shadow-sm mb-8 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Loading...' : 'Start Free Trial'}
               </button>
+
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -720,7 +703,7 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span className="text-gray-700">Everything in the starter plan</span>
+                  <span className="text-gray-700 text-sm">Import products with 1 click</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -728,7 +711,7 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span className="text-gray-700">10000 credits</span>
+                  <span className="text-gray-700 text-sm">Edit products before importing</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -736,7 +719,7 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span className="text-gray-700">One-click import competitors' product pages</span>
+                  <span className="text-gray-700 text-sm">Translate products to any language</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -744,7 +727,7 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span className="text-gray-700">12 hand-picked bestsellers</span>
+                  <span className="text-gray-700 text-sm">Improve product texts with AI (title, description, etc.)</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -752,34 +735,7 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span className="text-gray-700">Connect up to three stores</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Pro Plan */}
-            <div className="bg-white border-2 border-gray-200 rounded-2xl p-8 relative">
-              <div className="absolute top-6 right-6 bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1 rounded-full">
-                Beta
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-6">Pro Plan</h3>
-              <div className="mb-6">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-bold text-gray-900">$40</span>
-                  <span className="text-gray-400 line-through">from $99,99</span>
-                </div>
-              </div>
-              <button className="w-full py-3 bg-white border-2 border-gray-900 text-gray-900 font-semibold rounded-lg hover:bg-gray-50 transition-colors mb-8">
-                Send us a message
-              </button>
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">Everything in the Basic plan</span>
+                  <span className="text-gray-700 text-sm">Connect unlimited stores</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -787,47 +743,7 @@ export default function Home() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span className="text-gray-700">Unlimited credits & stores connected</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">200 AI credits</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">AI-generated product pages (1 credit per product page)</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">AI-generated branded product images (5 credit per image)</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">AI-generated branded product videos (10 credits per video)</span>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  <span className="text-gray-700">Auto-push products</span>
+                  <span className="text-gray-700 text-sm">5000 credits per month</span>
                 </div>
               </div>
             </div>
@@ -836,7 +752,7 @@ export default function Home() {
       </div>
 
       {/* FAQ Section */}
-      <div className="w-full py-16 sm:py-24" style={{ backgroundColor: '#F1F5F2' }}>
+      <div id="faq" className="w-full py-16 sm:py-24" style={{ backgroundColor: '#F1F5F2' }}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Section Heading */}
           <div className="text-center mb-16">
@@ -849,73 +765,73 @@ export default function Home() {
           <div className="space-y-4">
             <details className="bg-white rounded-lg border border-gray-200 group">
               <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                <span className="font-semibold text-gray-900">How does Voria save me time and money?</span>
+                <span className="font-semibold text-gray-900">How does Voria save me time?</span>
                 <svg className="w-5 h-5 text-gray-400 group-open:rotate-45 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </summary>
               <div className="px-6 pb-6 text-gray-600">
-                Voria helps you identify winning products faster by showing you comprehensive competitor data and saturation levels, preventing you from wasting money on oversaturated products.
+                Voria automates the entire product listing creation process. What normally takes 20-45 minutes of manual work—copying descriptions, organizing variants, editing images, and translating content—now takes less than a minute. Simply paste a product URL and let Voria handle the rest.
               </div>
             </details>
 
             <details className="bg-white rounded-lg border border-gray-200 group">
               <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                <span className="font-semibold text-gray-900">How can I find the best products to sell?</span>
+                <span className="font-semibold text-gray-900">Which platforms does Voria support?</span>
                 <svg className="w-5 h-5 text-gray-400 group-open:rotate-45 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </summary>
               <div className="px-6 pb-6 text-gray-600">
-                Use our pre-set filters, magic search, and hand-picked bestsellers to discover products with high potential. Our platform analyzes millions of ads to find unsaturated winners.
+                Voria works with AliExpress, Temu, and other Shopify stores. You can import products from any of these platforms directly to your Shopify store with a single click. All product data, including images, variants, and descriptions, are automatically collected and formatted.
               </div>
             </details>
 
             <details className="bg-white rounded-lg border border-gray-200 group">
               <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                <span className="font-semibold text-gray-900">How can I estimate the saturation of a product?</span>
+                <span className="font-semibold text-gray-900">What AI features does Voria offer?</span>
                 <svg className="w-5 h-5 text-gray-400 group-open:rotate-45 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </summary>
               <div className="px-6 pb-6 text-gray-600">
-                Our product data shows all competitors actively advertising each product, breaking down saturation by country so you can find untapped markets.
+                Voria includes AI-powered translation to any language, automatic copywriting for product descriptions and titles, and AI image generation and editing. You can enhance product images, remove backgrounds, and create professional visuals without any design skills.
               </div>
             </details>
 
             <details className="bg-white rounded-lg border border-gray-200 group">
               <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                <span className="font-semibold text-gray-900">Why does Voria focus on fashion only?</span>
+                <span className="font-semibold text-gray-900">Do I need technical knowledge to use Voria?</span>
                 <svg className="w-5 h-5 text-gray-400 group-open:rotate-45 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </summary>
               <div className="px-6 pb-6 text-gray-600">
-                By focusing exclusively on fashion, we can provide deeper insights, better data quality, and more accurate saturation metrics specific to the fashion dropshipping niche.
+                No technical knowledge is required. Voria features an intuitive dashboard where you simply paste a product URL and click import. The platform handles all the technical details automatically, from data collection to Shopify integration.
               </div>
             </details>
 
             <details className="bg-white rounded-lg border border-gray-200 group">
               <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                <span className="font-semibold text-gray-900">What is unique about Voria?</span>
+                <span className="font-semibold text-gray-900">Can I edit products before importing to Shopify?</span>
                 <svg className="w-5 h-5 text-gray-400 group-open:rotate-45 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </summary>
               <div className="px-6 pb-6 text-gray-600">
-                We take a product-focused approach, showing all competitors for each product, and we limit our user base to 500 dropshippers to protect against saturation.
+                Yes! Voria allows you to review and edit all product information before importing. You can modify titles, descriptions, prices, variants, and images using our built-in AI tools. This ensures every listing matches your store&apos;s style and requirements.
               </div>
             </details>
 
             <details className="bg-white rounded-lg border border-gray-200 group">
               <summary className="flex items-center justify-between p-6 cursor-pointer list-none">
-                <span className="font-semibold text-gray-900">Why won't we add Pinterest and TikTok?</span>
+                <span className="font-semibold text-gray-900">How does Voria handle product variants?</span>
                 <svg className="w-5 h-5 text-gray-400 group-open:rotate-45 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
               </summary>
               <div className="px-6 pb-6 text-gray-600">
-                We focus exclusively on Facebook ads to maintain the highest quality data and most accurate insights. This specialization allows us to excel in one platform rather than spreading resources thin across multiple platforms.
+                Voria automatically organizes all product variants including sizes, colors, and styles. Variant images are correctly mapped and imported, ensuring each option displays the right image in your Shopify store. No manual organization needed.
               </div>
             </details>
           </div>
@@ -936,7 +852,7 @@ export default function Home() {
                 <span className="text-xl font-bold text-gray-900">Voria</span>
               </div>
               <p className="text-sm text-gray-600">
-                "Within two weeks, our biggest beta client's winning rate increased by 31%"
+                Automate your product listings and save hours every day. Built for modern e-commerce.
               </p>
             </div>
 
@@ -958,7 +874,7 @@ export default function Home() {
               <h3 className="font-semibold text-gray-900 mb-4 uppercase text-sm">Contact Us</h3>
               <ul className="space-y-2">
                 <li>
-                  <a href="#" className="text-gray-600 hover:text-gray-900 text-sm">Support page</a>
+                  <a href="/contact" className="text-gray-600 hover:text-gray-900 text-sm">Support page</a>
                 </li>
                 <li>
                   <a href="mailto:support@voria.com" className="text-gray-600 hover:text-gray-900 text-sm">support@voria.com</a>

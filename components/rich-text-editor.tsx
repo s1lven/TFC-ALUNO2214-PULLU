@@ -67,7 +67,7 @@ export default function RichTextEditor({ content, onChange }: RichTextEditorProp
       onChange(editor.getHTML());
       setForceUpdate(prev => prev + 1); // Force toolbar update
     },
-    onSelectionUpdate: ({ editor }) => {
+    onSelectionUpdate: () => {
       // Update toolbar when cursor moves
       setForceUpdate(prev => prev + 1);
     },
