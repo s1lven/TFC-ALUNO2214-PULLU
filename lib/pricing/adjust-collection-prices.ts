@@ -61,15 +61,20 @@ export function currencySymbol(code: string): string {
   return CURRENCY_SYMBOLS[code] ?? `${code} `;
 }
 
-/** Retail-style: largest price ≤ original with fractional part `ending` (e.g. 0.95). */
+/**
+ * Retail-style rounding: returns the largest value ≤ `price` whose decimal
+ * part equals `ending` (e.g. ending = 0.95 → ...95).
+ *
+ * Examples: roundToEnding(29.99, 0.95) → 29.95
+ *           roundToEnding(30.00, 0.95) → 29.95
+ *           roundToEnding(30.96, 0.95) → 30.95
+ */
 export function roundToEnding(price: number, ending: number): number {
   if (!Number.isFinite(price) || price <= 0) return 0;
   if (!Number.isFinite(ending) || ending <= 0 || ending >= 1) return Number(price.toFixed(2));
-
-  const whole = Math.floor(price);
-  let candidate = whole + ending;
-  if (candidate > price) candidate = whole - 1 + ending;
-  return Math.max(0, Number(candidate.toFixed(2)));
+  // Math.floor(price - ending) + ending is equivalent and avoids the two-step
+  const result = Math.floor(price - ending) + ending;
+  return Math.max(0, Number(result.toFixed(2)));
 }
 
 export function formatShopifyPrice(n: number): string {
@@ -78,9 +83,13 @@ export function formatShopifyPrice(n: number): string {
 }
 
 export type PriceAdjustPipeline = {
-  /** Multiply first: 1 unit of “from” currency × rate = “to” currency */
+  /** Multiply first: 1 unit of "from" currency × rate = "to" currency. Use 1 for no conversion. */
   exchangeRate: number;
-  discountPercent: number;
+  /**
+   * Percentage to adjust the price after currency conversion.
+   * Positive = increase (10 → +10%), negative = decrease (-20 → −20%). 0 = no change.
+   */
+  adjustPercent: number;
   maxPrice: number | null;
   /** null = no psychological rounding */
   roundEnding: number | null;
@@ -91,9 +100,10 @@ function applyPipelineScalar(value: number, pipe: PriceAdjustPipeline): number {
   if (pipe.exchangeRate > 0 && Number.isFinite(pipe.exchangeRate)) {
     v *= pipe.exchangeRate;
   }
-  if (pipe.discountPercent > 0) {
-    v *= 1 - Math.min(100, Math.max(0, pipe.discountPercent)) / 100;
+  if (pipe.adjustPercent !== 0 && Number.isFinite(pipe.adjustPercent)) {
+    v *= 1 + pipe.adjustPercent / 100;
   }
+  if (v < 0) v = 0;
   if (pipe.maxPrice != null && pipe.maxPrice > 0) {
     v = Math.min(v, pipe.maxPrice);
   }

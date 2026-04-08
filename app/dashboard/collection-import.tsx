@@ -86,8 +86,8 @@ export default function CollectionImport({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [priceMenuOpen, setPriceMenuOpen] = useState(false);
   const [fromCurrency, setFromCurrency] = useState('USD');
-  const [toCurrency, setToCurrency] = useState('EUR');
-  const [discountPercentInput, setDiscountPercentInput] = useState('');
+  const [toCurrency, setToCurrency] = useState('USD');
+  const [adjustPercentInput, setAdjustPercentInput] = useState('');
   const [maxPriceInput, setMaxPriceInput] = useState('');
   const [roundMode, setRoundMode] = useState<'none' | '0.95' | '0.90' | '0.99' | 'custom'>('none');
   const [customEndingInput, setCustomEndingInput] = useState('0.95');
@@ -166,7 +166,7 @@ export default function CollectionImport({
       return;
     }
 
-    const discountPercent = Math.min(100, Math.max(0, parseFloat(discountPercentInput) || 0));
+    const adjustPercent = parseFloat(adjustPercentInput) || 0;
     const maxPrice =
       maxPriceInput.trim() === '' ? null : parseFloat(maxPriceInput);
     if (maxPrice != null && (!Number.isFinite(maxPrice) || maxPrice <= 0)) {
@@ -210,7 +210,7 @@ export default function CollectionImport({
 
       const pipe = {
         exchangeRate: rate,
-        discountPercent,
+        adjustPercent,
         maxPrice,
         roundEnding,
       };
@@ -618,7 +618,7 @@ export default function CollectionImport({
                         setFromCurrency(e.target.value);
                         setRatePreview(null);
                       }}
-                      className="mt-1 w-full h-9 rounded-md border border-gray-300 bg-white text-gray-900 text-xs px-2"
+                      className="mt-1 w-full h-9 rounded-md border border-gray-300 bg-white text-gray-900 text-xs px-2 focus:outline-none focus:ring-2 focus:ring-emerald-400"
                     >
                       {FRANKFURTER_CURRENCIES.map((c) => (
                         <option key={c.code} value={c.code}>
@@ -635,7 +635,7 @@ export default function CollectionImport({
                         setToCurrency(e.target.value);
                         setRatePreview(null);
                       }}
-                      className="mt-1 w-full h-9 rounded-md border border-gray-300 bg-white text-gray-900 text-xs px-2"
+                      className="mt-1 w-full h-9 rounded-md border border-gray-300 bg-white text-gray-900 text-xs px-2 focus:outline-none focus:ring-2 focus:ring-emerald-400"
                     >
                       {FRANKFURTER_CURRENCIES.map((c) => (
                         <option key={c.code} value={c.code}>
@@ -656,17 +656,16 @@ export default function CollectionImport({
               <div className="p-4 border-b border-gray-100 space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-xs text-gray-700">Lower prices by (%)</Label>
+                    <Label className="text-xs text-gray-700">Adjust price (%)</Label>
                     <Input
                       type="number"
-                      min={0}
-                      max={100}
                       step={1}
-                      placeholder="0"
-                      value={discountPercentInput}
-                      onChange={(e) => setDiscountPercentInput(e.target.value)}
-                      className="mt-1 h-9 text-xs"
+                      placeholder="e.g. 10 or -20"
+                      value={adjustPercentInput}
+                      onChange={(e) => setAdjustPercentInput(e.target.value)}
+                      className="mt-1 h-9 text-xs text-gray-900 bg-white"
                     />
+                    <p className="text-[11px] text-gray-500 mt-1">Positive = raise, negative = lower</p>
                   </div>
                   <div>
                     <Label className="text-xs text-gray-700">Max price cap ({toCurrency})</Label>
@@ -677,7 +676,7 @@ export default function CollectionImport({
                       placeholder="No cap"
                       value={maxPriceInput}
                       onChange={(e) => setMaxPriceInput(e.target.value)}
-                      className="mt-1 h-9 text-xs"
+                      className="mt-1 h-9 text-xs text-gray-900 bg-white"
                     />
                   </div>
                 </div>
@@ -714,7 +713,7 @@ export default function CollectionImport({
                       value={customEndingInput}
                       onChange={(e) => setCustomEndingInput(e.target.value)}
                       placeholder="0.95"
-                      className="mt-2 h-9 text-xs"
+                      className="mt-2 h-9 text-xs text-gray-900 bg-white"
                     />
                   )}
                   <p className="text-[11px] text-gray-500 mt-1.5">
