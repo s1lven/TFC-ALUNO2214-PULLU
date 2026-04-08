@@ -2,10 +2,18 @@
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ArrowLeft, Sparkles, CircleDollarSign, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { ShopifyStore } from '@/types';
+import {
+  adjustCollectionProductsPrices,
+  currencySymbol,
+  FRANKFURTER_CURRENCIES,
+  type CollectionProductShape,
+} from '@/lib/pricing/adjust-collection-prices';
 
 type CollectionProduct = {
   title?: string;
@@ -76,6 +84,18 @@ export default function CollectionImport({
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
   const [enhancementPrompt, setEnhancementPrompt] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [priceMenuOpen, setPriceMenuOpen] = useState(false);
+  const [fromCurrency, setFromCurrency] = useState('USD');
+  const [toCurrency, setToCurrency] = useState('EUR');
+  const [discountPercentInput, setDiscountPercentInput] = useState('');
+  const [maxPriceInput, setMaxPriceInput] = useState('');
+  const [roundMode, setRoundMode] = useState<'none' | '0.95' | '0.90' | '0.99' | 'custom'>('none');
+  const [customEndingInput, setCustomEndingInput] = useState('0.95');
+  const [applyPricesToSelectedOnly, setApplyPricesToSelectedOnly] = useState(false);
+  const [listCurrencyCode, setListCurrencyCode] = useState('USD');
+  const [ratePreview, setRatePreview] = useState<{ rate: number; date: string | null } | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
+  const [priceAdjustLoading, setPriceAdjustLoading] = useState(false);
 
   const filteredLanguages = languages.filter(lang =>
     lang.name.toLowerCase().includes(languageSearch.toLowerCase())
@@ -135,6 +155,85 @@ export default function CollectionImport({
       const newSelected = [...selectedProducts, index];
       setSelectedProducts(newSelected);
       setSelectAll(newSelected.length === collectionData.products?.length);
+    }
+  };
+
+  const applyPriceAdjustments = async () => {
+    if (!collectionData?.products?.length) return;
+
+    if (applyPricesToSelectedOnly && selectedProducts.length === 0) {
+      setPriceError('Select at least one product, or turn off “selected only”.');
+      return;
+    }
+
+    const discountPercent = Math.min(100, Math.max(0, parseFloat(discountPercentInput) || 0));
+    const maxPrice =
+      maxPriceInput.trim() === '' ? null : parseFloat(maxPriceInput);
+    if (maxPrice != null && (!Number.isFinite(maxPrice) || maxPrice <= 0)) {
+      setPriceError('Cap must be a positive number, or leave blank.');
+      return;
+    }
+
+    let roundEnding: number | null = null;
+    if (roundMode === 'custom') {
+      const e = parseFloat(customEndingInput);
+      if (!Number.isFinite(e) || e <= 0 || e >= 1) {
+        setPriceError('Custom ending must be a decimal between 0 and 1 (e.g. 0.95).');
+        return;
+      }
+      roundEnding = e;
+    } else if (roundMode !== 'none') {
+      roundEnding = parseFloat(roundMode);
+    }
+
+    setPriceAdjustLoading(true);
+    setPriceError(null);
+
+    try {
+      let rate = 1;
+      if (fromCurrency !== toCurrency) {
+        const res = await fetch('/api/exchange-rates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: fromCurrency, to: toCurrency }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setPriceError(typeof json.error === 'string' ? json.error : 'Failed to load exchange rate');
+          return;
+        }
+        rate = json.rate as number;
+        setRatePreview({ rate: json.rate as number, date: json.date ?? null });
+      } else {
+        setRatePreview({ rate: 1, date: null });
+      }
+
+      const pipe = {
+        exchangeRate: rate,
+        discountPercent,
+        maxPrice,
+        roundEnding,
+      };
+
+      const products = collectionData.products as CollectionProductShape[];
+      const indices = applyPricesToSelectedOnly
+        ? [...selectedProducts].sort((a, b) => a - b)
+        : products.map((_, i) => i);
+
+      const next = [...products];
+      for (const i of indices) {
+        const row = products[i];
+        if (!row) continue;
+        const [adjusted] = adjustCollectionProductsPrices([row], pipe);
+        next[i] = adjusted;
+      }
+
+      setCollectionData((prev) => (prev ? { ...prev, products: next } : prev));
+      setListCurrencyCode(toCurrency);
+    } catch (e) {
+      setPriceError(e instanceof Error ? e.message : 'Something went wrong');
+    } finally {
+      setPriceAdjustLoading(false);
     }
   };
 
@@ -479,7 +578,183 @@ export default function CollectionImport({
             <ArrowLeft size={16} />
             Back
           </button>
-          
+
+          <div className="flex items-center gap-2">
+          <DropdownMenu
+            open={priceMenuOpen}
+            onOpenChange={(open) => {
+              setPriceMenuOpen(open);
+              if (!open) setPriceError(null);
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200 h-9 px-4 text-xs font-medium"
+              >
+                <CircleDollarSign size={16} className="mr-2" />
+                Adjust prices
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="bg-white border-gray-200 w-[400px] p-0 shadow-xl"
+            >
+              <div className="bg-emerald-50 border-b border-emerald-100 px-4 py-3">
+                <p className="text-xs font-semibold text-emerald-900">Currency & pricing</p>
+                <p className="text-xs text-emerald-800 mt-0.5">
+                  Order: convert (ECB via Frankfurter) → percent off → cap in target currency → cent ending. The product list updates as soon as you apply.
+                </p>
+              </div>
+
+              <div className="p-4 border-b border-gray-100 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-gray-700">Prices are in</Label>
+                    <select
+                      value={fromCurrency}
+                      onChange={(e) => {
+                        setFromCurrency(e.target.value);
+                        setRatePreview(null);
+                      }}
+                      className="mt-1 w-full h-9 rounded-md border border-gray-300 bg-white text-gray-900 text-xs px-2"
+                    >
+                      {FRANKFURTER_CURRENCIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} — {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-700">Convert to</Label>
+                    <select
+                      value={toCurrency}
+                      onChange={(e) => {
+                        setToCurrency(e.target.value);
+                        setRatePreview(null);
+                      }}
+                      className="mt-1 w-full h-9 rounded-md border border-gray-300 bg-white text-gray-900 text-xs px-2"
+                    >
+                      {FRANKFURTER_CURRENCIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} — {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {ratePreview && fromCurrency !== toCurrency && (
+                  <p className="text-[11px] text-gray-600">
+                    1 {fromCurrency} ≈ {ratePreview.rate.toFixed(4)} {toCurrency}
+                    {ratePreview.date ? ` (ECB: ${ratePreview.date})` : ''}
+                  </p>
+                )}
+              </div>
+
+              <div className="p-4 border-b border-gray-100 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-gray-700">Lower prices by (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      placeholder="0"
+                      value={discountPercentInput}
+                      onChange={(e) => setDiscountPercentInput(e.target.value)}
+                      className="mt-1 h-9 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-gray-700">Max price cap ({toCurrency})</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      placeholder="No cap"
+                      value={maxPriceInput}
+                      onChange={(e) => setMaxPriceInput(e.target.value)}
+                      className="mt-1 h-9 text-xs"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-700 mb-2 block">Round to ending</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {([
+                      ['none', 'No rounding'],
+                      ['0.95', '.95'],
+                      ['0.90', '.90'],
+                      ['0.99', '.99'],
+                      ['custom', 'Custom'],
+                    ] as const).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setRoundMode(key)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                          roundMode === key
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {roundMode === 'custom' && (
+                    <Input
+                      type="number"
+                      step={0.01}
+                      min={0.01}
+                      max={0.99}
+                      value={customEndingInput}
+                      onChange={(e) => setCustomEndingInput(e.target.value)}
+                      placeholder="0.95"
+                      className="mt-2 h-9 text-xs"
+                    />
+                  )}
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    Chooses the highest price ≤ the current amount with that cent ending (e.g. 12.40 → 11.99 with .99).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="price-selected-only"
+                    checked={applyPricesToSelectedOnly}
+                    onCheckedChange={(c) => setApplyPricesToSelectedOnly(c === true)}
+                  />
+                  <label htmlFor="price-selected-only" className="text-xs text-gray-700 cursor-pointer">
+                    Only selected products ({selectedProducts.length})
+                  </label>
+                </div>
+                {priceError && (
+                  <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-md px-2 py-1.5">
+                    {priceError}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  className="w-full h-9 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                  disabled={priceAdjustLoading}
+                  onClick={() => void applyPriceAdjustments()}
+                >
+                  {priceAdjustLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Applying…
+                    </span>
+                  ) : (
+                    'Apply to product list'
+                  )}
+                </Button>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <DropdownMenu open={isDropdownOpen} onOpenChange={(open) => {
             setIsDropdownOpen(open);
             if (!open) {
@@ -574,6 +849,7 @@ export default function CollectionImport({
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </div>
 
         {/* Content */}
@@ -767,11 +1043,13 @@ export default function CollectionImport({
                           {product.variants[0].compare_at_price && 
                            parseFloat(product.variants[0].compare_at_price) > parseFloat(product.variants[0].price) && (
                             <span className="text-gray-500 text-xs line-through">
-                              ${product.variants[0].compare_at_price}
+                              {currencySymbol(listCurrencyCode)}
+                              {product.variants[0].compare_at_price}
                             </span>
                           )}
                           <span className="text-gray-900 font-semibold text-sm">
-                            ${product.variants[0].price}
+                            {currencySymbol(listCurrencyCode)}
+                            {product.variants[0].price}
                           </span>
                         </>
                       )}
