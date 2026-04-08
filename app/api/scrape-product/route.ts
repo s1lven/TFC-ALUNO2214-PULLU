@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isPublicHttpUrlForFetch } from '@/lib/security/public-url';
+import { fetchShopifyPublicJson } from '@/lib/scrape/shopify-public-json';
+import { extractShopifyProductHandle } from '@/lib/scrape/shopify-url';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,41 +33,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL host is not allowed' }, { status: 400 });
     }
 
-    // Extract store domain and product handle from URL
     const domain = productUrl.hostname;
-    const pathParts = productUrl.pathname.split('/').filter(part => part);
-    const productHandle = pathParts[pathParts.length - 1];
+    const productHandle = extractShopifyProductHandle(productUrl.pathname);
 
-    // Use the direct product.json endpoint (more reliable)
-    const productJsonUrl = `https://${domain}/products/${productHandle}.json`;
-    
-    console.log('Fetching:', productJsonUrl);
-    
-    const productResponse = await fetch(productJsonUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json',
-      },
-    });
-
-    if (!productResponse.ok) {
-      throw new Error(`HTTP error! status: ${productResponse.status}`);
+    if (!productHandle) {
+      return NextResponse.json(
+        { error: 'Could not find a product handle in the URL (use a link like /products/your-handle).' },
+        { status: 400 },
+      );
     }
 
-    const productData = await productResponse.json();
-    
+    const productJsonUrl = `https://${domain}/products/${productHandle}.json`;
+
+    console.log('Fetching:', productJsonUrl);
+
+    const productData = await fetchShopifyPublicJson<{ product?: unknown }>(productJsonUrl, domain);
+
     if (!productData.product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
-    // Return the EXACT product data as it comes from Shopify
     return NextResponse.json(productData.product);
-
   } catch (error) {
     console.error('Scraping error:', error);
     return NextResponse.json(
       { error: `Failed to scrape product: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

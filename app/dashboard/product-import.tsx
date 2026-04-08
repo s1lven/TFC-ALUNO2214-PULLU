@@ -324,12 +324,26 @@ export default function ProductImport({
         }
       });
       
+      const firstScrapedPrice = String(editableVariants[0]?.price ?? '');
+      const allVariantPricesMatch =
+        editableVariants.length <= 1 ||
+        editableVariants.every((v) => String(v.price ?? '') === firstScrapedPrice);
+
       // Apply the mapping to update variant option values
-      const updatedVariants = editableVariants.map((variant: Record<string, unknown>) => {
+      const updatedVariants = editableVariants.map((variant: Record<string, unknown>, index: number) => {
+        const price =
+          allVariantPricesMatch || index === 0
+            ? String(editablePrice || variant.price || '')
+            : String(variant.price ?? editablePrice ?? '');
+        const compare_at_price =
+          allVariantPricesMatch || index === 0
+            ? String(editableComparePrice || variant.compare_at_price || '')
+            : String(variant.compare_at_price ?? editableComparePrice ?? '');
+
         const newVariant: Record<string, unknown> = {
           ...variant,
-          price: editablePrice || variant.price,
-          compare_at_price: editableComparePrice || variant.compare_at_price,
+          price,
+          compare_at_price,
           taxable: isTaxable,
         };
         
