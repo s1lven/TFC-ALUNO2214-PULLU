@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/shopify/store-access';
 import {
-  buildScrapedToCreatedImageIdMap,
   matchCreatedVariantsToOriginals,
   resolveVariantSourceImageId,
 } from '@/lib/shopify/variant-images';
@@ -165,8 +164,11 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
     const result = await shopifyResponse.json();
     const createdProduct = result.product;
 
-    // Update variant images (Admin API requires PUT after create). Match by image URL + option
-    // keys so storefront JSON (collection import) behaves like single-product import.
+    // Update variant images (Admin API requires PUT after create).
+    // Strategy:
+    //   1. Map originalImage[i].id → createdImage[i].id by index (Shopify preserves upload order).
+    //   2. Use image.variant_ids from the scraped JSON to know which variants belong to which image.
+    //   3. Fall back to featured_image.id on the variant if variant_ids is absent.
     const originalVariantsList = (variants ?? []) as Record<string, unknown>[];
     if (
       createdProduct?.id &&
@@ -177,26 +179,50 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
     ) {
       const createdImages = createdProduct.images as Array<{ id: number; src?: string }>;
       const createdVariants = createdProduct.variants as Record<string, unknown>[];
-      const originalImages = product.images as Array<{ id?: unknown; src?: string }>;
+      const originalImages = product.images as Array<{
+        id?: unknown;
+        src?: string;
+        variant_ids?: number[];
+      }>;
 
-      const imageMapping = buildScrapedToCreatedImageIdMap(originalImages, createdImages);
+      // Step 1: index-based image ID mapping (most reliable — no URL parsing needed)
+      const indexImageMap = new Map<string, number>(); // originalImageId → newImageId
+      for (let i = 0; i < originalImages.length; i++) {
+        const orig = originalImages[i];
+        const created = createdImages[i];
+        if (orig?.id != null && created?.id != null) {
+          indexImageMap.set(String(orig.id), Number(created.id));
+        }
+      }
+
+      // Step 2: build originalVariantId → newImageId via image.variant_ids
+      const variantToImageMap = new Map<string, number>();
+      for (const img of originalImages) {
+        if (!img.id || !img.variant_ids?.length) continue;
+        const newImageId = indexImageMap.get(String(img.id));
+        if (!newImageId) continue;
+        for (const vid of img.variant_ids) {
+          variantToImageMap.set(String(vid), newImageId);
+        }
+      }
+
       const pairedCreated = matchCreatedVariantsToOriginals(originalVariantsList, createdVariants);
-
-      console.log('Variant image mapping:', {
-        imageMappings: imageMapping.size,
-        originals: originalVariantsList.length,
-        created: createdVariants.length,
-      });
 
       for (let i = 0; i < originalVariantsList.length; i++) {
         const originalVariant = originalVariantsList[i];
         const createdVariant = pairedCreated[i];
         if (!createdVariant?.id) continue;
 
-        const sourceImageId = resolveVariantSourceImageId(originalVariant);
-        if (!sourceImageId || !imageMapping.has(sourceImageId)) continue;
+        // Primary: variant_ids lookup
+        let newImageId = variantToImageMap.get(String(originalVariant.id));
 
-        const newImageId = imageMapping.get(sourceImageId)!;
+        // Fallback: featured_image.id on the variant
+        if (!newImageId) {
+          const sourceImageId = resolveVariantSourceImageId(originalVariant);
+          if (sourceImageId) newImageId = indexImageMap.get(sourceImageId);
+        }
+
+        if (!newImageId) continue;
 
         try {
           const putResponse = await fetch(
@@ -208,10 +234,7 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
                 'X-Shopify-Access-Token': shopifyToken,
               },
               body: JSON.stringify({
-                variant: {
-                  id: createdVariant.id,
-                  image_id: newImageId,
-                },
+                variant: { id: createdVariant.id, image_id: newImageId },
               }),
             },
           );

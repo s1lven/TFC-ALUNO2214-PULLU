@@ -347,12 +347,42 @@ export default function CollectionImport({
 
               const data = await response.json();
               const translatedData = data.translatedData;
-              
+
+              // Build a map: original option value → translated value
+              // (e.g. "Green" → "Verde") so we can update variant option fields too.
+              const valueMap: Record<string, string> = {};
+              const originalOptions = productTyped.options || [];
+              const transOptions: Array<{ name: string; values: string[] }> =
+                translatedData.options || [];
+              for (let oi = 0; oi < originalOptions.length && oi < transOptions.length; oi++) {
+                const origVals = originalOptions[oi].values || [];
+                const transVals = transOptions[oi].values || [];
+                for (let vi = 0; vi < origVals.length && vi < transVals.length; vi++) {
+                  if (origVals[vi] && transVals[vi]) {
+                    valueMap[origVals[vi]] = transVals[vi];
+                  }
+                }
+              }
+
+              // Apply translated values to variant option fields
+              const translatedVariants = (productTyped.variants || []).map((v) => {
+                const o1 = v.option1 as string | undefined;
+                const o2 = v.option2 as string | undefined;
+                const o3 = v.option3 as string | undefined;
+                return {
+                  ...v,
+                  option1: o1 ? (valueMap[o1] ?? o1) : o1,
+                  option2: o2 ? (valueMap[o2] ?? o2) : o2,
+                  option3: o3 ? (valueMap[o3] ?? o3) : o3,
+                };
+              });
+
               return {
                 ...productTyped,
                 title: translatedData.title || productTyped.title,
                 body_html: translatedData.description || productTyped.body_html,
-                options: translatedData.options || productTyped.options,
+                options: transOptions.length ? transOptions : productTyped.options,
+                variants: translatedVariants,
               } as CollectionProduct;
             } catch (error) {
               console.error(`Error translating ${productTyped.title}:`, error);
