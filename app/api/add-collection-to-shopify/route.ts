@@ -139,25 +139,35 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
       });
     }
 
-    // Create product via REST API
-    const shopifyResponse = await fetch(
-      `https://${shopifyStoreUrl}/admin/api/2024-01/products.json`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': shopifyToken,
-        },
-        body: JSON.stringify(productData),
+    // Create product via REST API with retry/backoff on 429
+    let shopifyResponse: Response | null = null;
+    let createDelay = 1000;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      shopifyResponse = await fetch(
+        `https://${shopifyStoreUrl}/admin/api/2024-01/products.json`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Access-Token': shopifyToken,
+          },
+          body: JSON.stringify(productData),
+        }
+      );
+      if (shopifyResponse.status === 429) {
+        await new Promise((r) => setTimeout(r, createDelay));
+        createDelay *= 2;
+        continue;
       }
-    );
+      break;
+    }
 
-    if (!shopifyResponse.ok) {
-      const errorText = await shopifyResponse.text();
+    if (!shopifyResponse || !shopifyResponse.ok) {
+      const errorText = await shopifyResponse?.text();
       console.error('Shopify API error:', errorText);
       return NextResponse.json(
         { success: false, error: `Shopify API error: ${errorText}` },
-        { status: shopifyResponse.status }
+        { status: shopifyResponse?.status ?? 500 }
       );
     }
 
@@ -208,12 +218,16 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
 
       const pairedCreated = matchCreatedVariantsToOriginals(originalVariantsList, createdVariants);
 
+      // Group variants by their target image so we do ONE PUT per image instead of
+      // one PUT per variant — dramatically fewer API calls and no rate-limit issues.
+      const imageToVariantsMap = new Map<number, number[]>(); // newImageId → [newVariantIds]
+
       for (let i = 0; i < originalVariantsList.length; i++) {
         const originalVariant = originalVariantsList[i];
         const createdVariant = pairedCreated[i];
         if (!createdVariant?.id) continue;
 
-        // Primary: variant_ids lookup
+        // Primary: variant_ids from the images array
         let newImageId = variantToImageMap.get(String(originalVariant.id));
 
         // Fallback 1: featured_image.id on the variant
@@ -222,36 +236,51 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
           if (sourceImageId) newImageId = indexImageMap.get(sourceImageId);
         }
 
-        // Fallback 2: product-level images (no variant_ids / featured_image set at source)
-        // → assign first image so every variant has something linked rather than nothing.
+        // Fallback 2: product-level images → use first image so every variant gets something
         if (!newImageId && createdImages.length > 0) {
           newImageId = Number(createdImages[0].id);
         }
 
         if (!newImageId) continue;
 
-        try {
-          const putResponse = await fetch(
-            `https://${shopifyStoreUrl}/admin/api/2024-01/variants/${createdVariant.id}.json`,
-            {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Shopify-Access-Token': shopifyToken,
+        const bucket = imageToVariantsMap.get(newImageId) ?? [];
+        bucket.push(Number(createdVariant.id));
+        imageToVariantsMap.set(newImageId, bucket);
+      }
+
+      // One PUT per image with retry/backoff on 429 (Shopify: 2 req/s)
+      for (const [imgId, variantIds] of imageToVariantsMap) {
+        let delay = 700;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          try {
+            const putResponse = await fetch(
+              `https://${shopifyStoreUrl}/admin/api/2024-01/products/${createdProduct.id}/images/${imgId}.json`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-Shopify-Access-Token': shopifyToken,
+                },
+                body: JSON.stringify({ image: { id: imgId, variant_ids: variantIds } }),
               },
-              body: JSON.stringify({
-                variant: { id: createdVariant.id, image_id: newImageId },
-              }),
-            },
-          );
-          if (!putResponse.ok) {
-            const errText = await putResponse.text();
-            console.error(`Variant ${createdVariant.id} image update failed:`, errText);
+            );
+            if (putResponse.status === 429) {
+              await new Promise((r) => setTimeout(r, delay));
+              delay *= 2;
+              continue;
+            }
+            if (!putResponse.ok) {
+              const errText = await putResponse.text();
+              console.error(`Image ${imgId} variant assignment failed:`, errText);
+            }
+            break;
+          } catch (error) {
+            console.error(`Failed to assign variants to image ${imgId}:`, error);
+            break;
           }
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        } catch (error) {
-          console.error(`Failed to update variant ${createdVariant.id} image:`, error);
         }
+        // Respect Shopify's 2 req/s limit between image updates
+        await new Promise((r) => setTimeout(r, 600));
       }
     }
 
