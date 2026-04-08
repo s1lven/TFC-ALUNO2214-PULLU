@@ -1,17 +1,16 @@
-/** Fetch Shopify legacy *.json endpoints with browser-like headers (avoids bad/blocked bot responses). */
+/** Fetch Shopify legacy *.json endpoints.
+ * Intentionally avoids Accept-Language / geo headers so Shopify Markets
+ * doesn't serve a localised (wrong-currency) price instead of the base price. */
 export async function fetchShopifyPublicJson<T = unknown>(
   jsonUrl: string,
-  storeHost: string,
+  _storeHost: string,
 ): Promise<T> {
   const res = await fetch(jsonUrl, {
     cache: 'no-store',
     redirect: 'follow',
     headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      Accept: 'application/json, text/javascript, */*;q=0.01',
-      'Accept-Language': 'en-US,en;q=0.9',
-      Referer: `https://${storeHost}/`,
+      'User-Agent': 'Pullu-Scraper/1.0',
+      Accept: 'application/json',
     },
   });
 
