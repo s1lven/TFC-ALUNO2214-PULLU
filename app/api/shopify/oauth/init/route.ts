@@ -6,6 +6,7 @@ import {
   getOAuthRedirectUri,
   normalizeShopifyHost,
 } from '@/lib/shopify/oauth';
+import { resolvePublicAppBaseUrl } from '@/lib/shopify/public-app-url';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,10 +45,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const appBase =
-      process.env.NEXT_PUBLIC_APP_URL ||
-      process.env.SHOPIFY_APP_URL ||
-      `${request.nextUrl.protocol}//${request.headers.get('host') || 'localhost:3001'}`;
+    const appBase = resolvePublicAppBaseUrl(request);
     const redirectUri =
       process.env.SHOPIFY_OAUTH_REDIRECT_URI || getOAuthRedirectUri(appBase);
 

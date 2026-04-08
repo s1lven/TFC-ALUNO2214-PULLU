@@ -5,17 +5,15 @@ import {
   validateShopHostname,
   verifyOAuthHmac,
 } from '@/lib/shopify/oauth';
+import { resolvePublicAppBaseUrl } from '@/lib/shopify/public-app-url';
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const searchParams = url.searchParams;
-  const appBase =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.SHOPIFY_APP_URL ||
-    'http://localhost:3001';
+  const appBase = resolvePublicAppBaseUrl(request);
 
   const redirectDashboard = (params: Record<string, string>) => {
-    const u = new URL('/dashboard', appBase.replace(/\/$/, ''));
+    const u = new URL('/dashboard', appBase);
     Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
     return NextResponse.redirect(u);
   };
