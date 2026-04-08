@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/shopify/store-access';
 
 // Helper function to make GraphQL requests to Shopify
 async function shopifyGraphQL(shopifyStoreUrl: string, shopifyToken: string, query: string, variables: Record<string, unknown> = {}) {
@@ -55,6 +56,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Store not found' }, { status: 404 });
     }
 
+    const accessToken = getShopifyAccessTokenForApi(store);
+    if (!accessToken) {
+      return NextResponse.json({ error: STORE_NOT_CONNECTED_MESSAGE }, { status: 400 });
+    }
+
     // Reorder products in collection using GraphQL
     console.log('🔄 Reordering', productIds.length, 'products in collection', collectionGid);
     
@@ -77,7 +83,7 @@ export async function POST(request: NextRequest) {
     try {
       await shopifyGraphQL(
         store.shopify_store_url,
-        store.shopify_token,
+        accessToken,
         updateCollectionMutation,
         { 
           input: {
@@ -117,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     const data = await shopifyGraphQL(
       store.shopify_store_url,
-      store.shopify_token,
+      accessToken,
       mutation,
       { id: collectionGid, moves }
     );

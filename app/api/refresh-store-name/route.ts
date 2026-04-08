@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/shopify/store-access';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,6 +37,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const accessToken = getShopifyAccessTokenForApi(store);
+    if (!accessToken) {
+      return NextResponse.json({ error: STORE_NOT_CONNECTED_MESSAGE }, { status: 400 });
+    }
+
     // Fetch shop info from Shopify
     let shopName = store.shopify_store_url.replace('.myshopify.com', '');
     try {
@@ -44,7 +50,7 @@ export async function POST(request: NextRequest) {
         {
           method: 'GET',
           headers: {
-            'X-Shopify-Access-Token': store.shopify_token,
+            'X-Shopify-Access-Token': accessToken,
           },
         }
       );

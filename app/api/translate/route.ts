@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { resolveOpenAiApiKeyForUser } from '@/lib/openai/user-api-key';
 
 // DeepL API (commented out - now using OpenAI)
 // const DEEPL_API_KEY = '2c211040-4971-47d7-aba8-4a6c86e37dc1:fx';
 // const DEEPL_API_URL = 'https://api-free.deepl.com/v2/translate';
-
-// OpenAI API
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const languageMap: Record<string, string> = {
   'EN-US': 'English',
@@ -37,6 +36,25 @@ const languageMap: Record<string, string> = {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
+    }
+
+    const OPENAI_API_KEY = await resolveOpenAiApiKeyForUser(user.id);
+    if (!OPENAI_API_KEY) {
+      return NextResponse.json(
+        {
+          error: 'Add your OpenAI API key in Account settings to use translation.',
+        },
+        { status: 400 },
+      );
+    }
+
     const body = await request.json();
     const { productData, targetLang, enhancementPrompt } = body;
 
@@ -44,13 +62,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Product data and target language are required' },
         { status: 400 }
-      );
-    }
-
-    if (!OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
-        { status: 500 }
       );
     }
 

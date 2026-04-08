@@ -86,7 +86,16 @@ export default function ProductImport({
   setEditableOptions: React.Dispatch<React.SetStateAction<Array<{ name: string; values: string[] }>>>;
   editableVariants: Array<Record<string, unknown>>;
   setEditableVariants: React.Dispatch<React.SetStateAction<Array<Record<string, unknown>>>>;
-  selectedStore: { id: number; user_id: string; shopify_store_url: string; shopify_token: string; store_name?: string; created_at: string } | null;
+  selectedStore: {
+    id: number;
+    user_id: string;
+    shopify_store_url: string;
+    shopify_token?: string | null;
+    store_name?: string | null;
+    store_alias?: string | null;
+    connection_status?: string | null;
+    created_at: string;
+  } | null;
   collections: Array<{ id: string; title: string }>;
   isTaxable: boolean;
   setIsTaxable: React.Dispatch<React.SetStateAction<boolean>>;
@@ -415,11 +424,12 @@ export default function ProductImport({
         }),
       });
 
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error('Translation failed');
+        const msg =
+          typeof data?.error === 'string' ? data.error : 'Translation failed';
+        throw new Error(msg);
       }
-
-      const data = await response.json();
       const translatedData = data.translatedData;
 
       // Update title

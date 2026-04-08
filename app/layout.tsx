@@ -9,7 +9,7 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Voria - Create Listings 80% Faster",
+  title: "Pullu",
   description: "Import products, generate AI translations & descriptions, enhance images — all in one click. Save 80% of your product listing time.",
   icons: {
     icon: '/favicon.ico',

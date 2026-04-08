@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/shopify/store-access';
+import {
+  buildScrapedToCreatedImageIdMap,
+  matchCreatedVariantsToOriginals,
+  resolveVariantSourceImageId,
+} from '@/lib/shopify/variant-images';
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,6 +41,11 @@ export async function POST(request: NextRequest) {
         { error: 'Store not found' },
         { status: 404 }
       );
+    }
+
+    const accessToken = getShopifyAccessTokenForApi(store);
+    if (!accessToken) {
+      return NextResponse.json({ error: STORE_NOT_CONNECTED_MESSAGE }, { status: 400 });
     }
 
     // Construct the product data for Shopify
@@ -116,7 +127,7 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': store.shopify_token,
+          'X-Shopify-Access-Token': accessToken,
         },
         body: JSON.stringify(productData),
       }
@@ -133,69 +144,56 @@ export async function POST(request: NextRequest) {
 
     const result = await shopifyResponse.json();
 
-    // Update variant images if needed (Shopify needs a second call after product creation)
-    if (result.product?.id && result.product?.variants && result.product?.images) {
-      const createdImages = result.product.images;
-      const createdVariants = result.product.variants;
-      
-      console.log('Starting variant image mapping:', {
-        originalImagesCount: images.length,
-        createdImagesCount: createdImages.length,
-        variantsCount: variants.length,
-        createdVariantsCount: createdVariants.length,
-      });
-      
-      // Build image ID mapping from original images to created images
-      const imageMapping = new Map();
-      images.forEach((originalImg: { id?: string; src?: string; [key: string]: unknown }, index: number) => {
-        if (createdImages[index]) {
-          console.log(`Mapping image: ${originalImg.id} -> ${createdImages[index].id}`);
-          imageMapping.set(originalImg.id, createdImages[index].id);
-        }
-      });
+    // Update variant images (Admin API requires PUT after create)
+    const originalVariantsList = (variants ?? []) as Record<string, unknown>[];
+    if (
+      result.product?.id &&
+      result.product?.variants &&
+      result.product?.images &&
+      images?.length &&
+      originalVariantsList.length > 0
+    ) {
+      const createdImages = result.product.images as Array<{ id: number; src?: string }>;
+      const createdVariants = result.product.variants as Record<string, unknown>[];
+      const imageMapping = buildScrapedToCreatedImageIdMap(images, createdImages);
+      const pairedCreated = matchCreatedVariantsToOriginals(originalVariantsList, createdVariants);
 
-      console.log('Image mapping built:', imageMapping.size, 'mappings');
+      for (let i = 0; i < originalVariantsList.length; i++) {
+        const originalVariant = originalVariantsList[i];
+        const createdVariant = pairedCreated[i];
+        if (!createdVariant?.id) continue;
 
-      // Update variants that should have specific images
-      for (let i = 0; i < variants.length; i++) {
-        const originalVariant = variants[i];
-        const createdVariant = createdVariants[i];
-        
-        console.log(`Checking variant ${i}:`, {
-          hasImageId: !!originalVariant.image_id,
-          imageId: originalVariant.image_id,
-          hasMapping: originalVariant.image_id ? imageMapping.has(originalVariant.image_id) : false,
-        });
-        
-        if (originalVariant.image_id && imageMapping.has(originalVariant.image_id)) {
-          const newImageId = imageMapping.get(originalVariant.image_id);
-          
-          console.log(`Updating variant ${createdVariant.id} with image ${newImageId}`);
-          
-          try {
-            await fetch(
-              `https://${store.shopify_store_url}/admin/api/2024-01/variants/${createdVariant.id}.json`,
-              {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'X-Shopify-Access-Token': store.shopify_token,
+        const sourceImageId = resolveVariantSourceImageId(originalVariant);
+        if (!sourceImageId || !imageMapping.has(sourceImageId)) continue;
+
+        const newImageId = imageMapping.get(sourceImageId)!;
+
+        try {
+          const putResponse = await fetch(
+            `https://${store.shopify_store_url}/admin/api/2024-01/variants/${createdVariant.id}.json`,
+            {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Access-Token': accessToken,
+              },
+              body: JSON.stringify({
+                variant: {
+                  id: createdVariant.id,
+                  image_id: newImageId,
                 },
-                body: JSON.stringify({
-                  variant: {
-                    id: createdVariant.id,
-                    image_id: newImageId,
-                  },
-                }),
-              }
+              }),
+            },
+          );
+          if (!putResponse.ok) {
+            console.error(
+              `Variant ${createdVariant.id} image update failed:`,
+              await putResponse.text(),
             );
-            console.log(`Successfully updated variant ${createdVariant.id} image`);
-            
-            // Small delay to avoid rate limits
-            await new Promise(resolve => setTimeout(resolve, 100));
-          } catch (error) {
-            console.error(`Failed to update variant ${createdVariant.id} image:`, error);
           }
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error(`Failed to update variant ${createdVariant.id} image:`, error);
         }
       }
     }
@@ -210,7 +208,7 @@ export async function POST(request: NextRequest) {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'X-Shopify-Access-Token': store.shopify_token,
+                'X-Shopify-Access-Token': accessToken,
               },
               body: JSON.stringify({
                 collect: {

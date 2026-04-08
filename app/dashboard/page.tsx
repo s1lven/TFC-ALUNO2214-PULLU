@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus } from 'lucide-react';
@@ -8,8 +8,15 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import Image from 'next/image';
 import ProductImport from './product-import';
 import CollectionImport from './collection-import';
-import SubscriptionGate from '@/components/subscription-gate';
 import type { ShopifyStore, Product, ProductOption, Collection } from '@/types';
+
+function storeDisplayLabel(store: ShopifyStore): string {
+  return (
+    store.store_alias?.trim() ||
+    store.store_name?.trim() ||
+    store.shopify_store_url.replace('.myshopify.com', '')
+  );
+}
 
 export default function DashboardPage() {
   // Store management
@@ -17,8 +24,10 @@ export default function DashboardPage() {
   const [selectedStore, setSelectedStore] = useState<ShopifyStore | null>(null);
   const [loadingStores, setLoadingStores] = useState(true);
   const [showAddStoreModal, setShowAddStoreModal] = useState(false);
-  const [newStoreUrl, setNewStoreUrl] = useState('');
-  const [newStoreToken, setNewStoreToken] = useState('');
+  const [newStoreSubdomain, setNewStoreSubdomain] = useState('');
+  const [newStoreAlias, setNewStoreAlias] = useState('');
+  const [newClientId, setNewClientId] = useState('');
+  const [newClientSecret, setNewClientSecret] = useState('');
   const [addingStore, setAddingStore] = useState(false);
   const [storeError, setStoreError] = useState<string | null>(null);
   
@@ -61,27 +70,48 @@ export default function DashboardPage() {
   } | null>(null);
   const [importMode, setImportMode] = useState<'product' | 'collection' | null>(null);
 
-  // Fetch stores on mount
-  useEffect(() => {
-    const fetchStores = async () => {
-      try {
-        setLoadingStores(true);
-        const response = await fetch('/api/get-stores');
-        if (response.ok) {
-          const data = await response.json();
-          setStores(data.stores || []);
-          if (data.stores && data.stores.length > 0) {
-            setSelectedStore(data.stores[0]);
+  const fetchStores = useCallback(async () => {
+    try {
+      setLoadingStores(true);
+      const response = await fetch('/api/get-stores');
+      if (response.ok) {
+        const data = await response.json();
+        const list: ShopifyStore[] = data.stores || [];
+        setStores(list);
+        setSelectedStore((prev) => {
+          if (!list.length) return null;
+          if (prev && list.some((s) => s.id === prev.id)) {
+            return list.find((s) => s.id === prev.id) ?? list[0];
           }
-        }
-      } catch (error) {
-        console.error('Failed to fetch stores:', error);
-      } finally {
-        setLoadingStores(false);
+          return list[0];
+        });
       }
-    };
-    fetchStores();
+    } catch (error) {
+      console.error('Failed to fetch stores:', error);
+    } finally {
+      setLoadingStores(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchStores();
+  }, [fetchStores]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('shopify_connected') === '1') {
+      void fetchStores();
+      window.history.replaceState({}, '', '/dashboard');
+    }
+    const err = params.get('shopify_error');
+    if (err) {
+      const msg = params.get('shopify_message') || 'Shopify connection failed.';
+      setStoreError(msg);
+      void fetchStores();
+      window.history.replaceState({}, '', '/dashboard');
+    }
+  }, [fetchStores]);
 
   // Fetch collections when store is selected
   useEffect(() => {
@@ -106,39 +136,55 @@ export default function DashboardPage() {
     fetchCollections();
   }, [selectedStore]);
 
-  const addStore = async () => {
-    if (!newStoreUrl || !newStoreToken) {
-      setStoreError('Please provide both store URL and access token');
+  const resetConnectForm = () => {
+    setNewStoreSubdomain('');
+    setNewStoreAlias('');
+    setNewClientId('');
+    setNewClientSecret('');
+    setStoreError(null);
+  };
+
+  const startShopifyOAuth = async () => {
+    if (
+      !newStoreSubdomain?.trim() ||
+      !newStoreAlias?.trim() ||
+      !newClientId?.trim() ||
+      !newClientSecret?.trim()
+    ) {
+      setStoreError('Enter your store subdomain, alias, client ID, and secret.');
       return;
     }
-    
+
     setAddingStore(true);
     setStoreError(null);
-    
+
     try {
-      const response = await fetch('/api/add-store', {
+      const response = await fetch('/api/shopify/oauth/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopify_store_url: newStoreUrl, shopify_token: newStoreToken }),
+        body: JSON.stringify({
+          shop_subdomain: newStoreSubdomain.trim(),
+          store_alias: newStoreAlias.trim(),
+          client_id: newClientId.trim(),
+          client_secret: newClientSecret.trim(),
+        }),
       });
-
+      const data = await response.json();
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to add store');
+        throw new Error(data.error || 'Failed to start Shopify connection');
       }
-
-      const result = await response.json();
-      setStores([...stores, result.store]);
-      setSelectedStore(result.store);
-      setShowAddStoreModal(false);
-      setNewStoreUrl('');
-      setNewStoreToken('');
+      if (!data.authorizationUrl) {
+        throw new Error('No authorization URL returned');
+      }
+      window.location.href = data.authorizationUrl as string;
     } catch (err) {
       setStoreError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
       setAddingStore(false);
     }
   };
+
+  const selectedStoreReady =
+    !!selectedStore && selectedStore.connection_status !== 'pending_oauth';
 
   const scrapeProduct = async () => {
     if (!url) return;
@@ -207,7 +253,6 @@ export default function DashboardPage() {
   };
 
   return (
-    <SubscriptionGate>
     <div className="h-full overflow-hidden" style={{ backgroundColor: '#F1F5F2' }}>
       {/* Loading State */}
       {loadingStores ? (
@@ -352,7 +397,10 @@ export default function DashboardPage() {
               <button className="flex items-center gap-2.5 bg-green-50 hover:bg-green-100 border border-green-200 rounded-lg px-4 py-2.5 text-sm transition-colors shadow-sm">
                 <Image src="/shopify.png" alt="Shopify" width={18} height={18} />
                 <span className="font-medium text-green-700">
-                  {selectedStore?.store_name || selectedStore?.shopify_store_url.replace('.myshopify.com', '')}
+                  {selectedStore ? storeDisplayLabel(selectedStore) : ''}
+                  {selectedStore?.connection_status === 'pending_oauth' ? (
+                    <span className="ml-2 text-xs font-normal text-amber-700">(authorize in Shopify)</span>
+                  ) : null}
                 </span>
                 <svg className="w-4 h-4 text-green-700 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -369,7 +417,10 @@ export default function DashboardPage() {
                     <Image src="/shopify.png" alt="Shopify" width={16} height={16} />
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-sm truncate text-gray-900 hover:text-gray-900">
-                        {store.store_name || store.shopify_store_url.replace('.myshopify.com', '')}
+                        {storeDisplayLabel(store)}
+                        {store.connection_status === 'pending_oauth' ? (
+                          <span className="text-amber-600 text-xs ml-1">— pending</span>
+                        ) : null}
           </div>
                       <div className="text-xs text-gray-500 truncate hover:text-gray-500">{store.shopify_store_url}</div>
             </div>
@@ -410,30 +461,79 @@ export default function DashboardPage() {
                 </div>
                 <div className="space-y-5 mb-6">
                   <div>
-                    <label className="text-sm font-medium text-gray-700 mb-2.5 block text-left">Store URL</label>
-                    <Input value={newStoreUrl} onChange={(e) => setNewStoreUrl(e.target.value)}
-                           placeholder="your-store.myshopify.com"
-                           className="bg-white border-gray-300 text-gray-900 h-12 text-base" />
+                    <p className="text-sm font-medium text-gray-700 mb-2 block text-left">Domain name</p>
+                    <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                      <span className="text-gray-500 text-sm shrink-0">https://</span>
+                      <Input
+                        value={newStoreSubdomain}
+                        onChange={(e) => setNewStoreSubdomain(e.target.value)}
+                        placeholder="your-store"
+                        className="bg-white border-gray-300 text-gray-900 h-12 text-base min-w-[8rem] flex-1"
+                      />
+                      <span className="text-gray-500 text-sm shrink-0">.myshopify.com</span>
+                    </div>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-gray-700 mb-2.5 block text-left">Access Token</label>
-                    <Input value={newStoreToken} onChange={(e) => setNewStoreToken(e.target.value)}
-                           placeholder="shpat_..." type="password"
-                           className="bg-white border-gray-300 text-gray-900 h-12 text-base" />
+                    <label className="text-sm font-medium text-gray-700 mb-2.5 block text-left">Alias</label>
+                    <Input
+                      value={newStoreAlias}
+                      onChange={(e) => setNewStoreAlias(e.target.value)}
+                      placeholder="How you want this store labeled here"
+                      className="bg-white border-gray-300 text-gray-900 h-12 text-base"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2.5 block text-left">Client ID</label>
+                    <Input
+                      value={newClientId}
+                      onChange={(e) => setNewClientId(e.target.value)}
+                      placeholder="From app Settings → Credentials"
+                      className="bg-white border-gray-300 text-gray-900 h-12 text-base"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2.5 block text-left">Secret</label>
+                    <Input
+                      value={newClientSecret}
+                      onChange={(e) => setNewClientSecret(e.target.value)}
+                      type="password"
+                      placeholder="Client secret (admin API)"
+                      className="bg-white border-gray-300 text-gray-900 h-12 text-base"
+                    />
                   </div>
                   {storeError && (
                     <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                       <p className="text-red-600 text-sm">{storeError}</p>
                     </div>
                   )}
-                  <Button onClick={addStore} disabled={addingStore || !newStoreUrl || !newStoreToken}
-                          className="w-full bg-[#4CF365] hover:bg-[#3de056] text-white h-12 text-base font-medium rounded-xl">
-                    {addingStore ? 'Connecting...' : 'Connect Store'}
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      type="button"
+                      onClick={startShopifyOAuth}
+                      disabled={
+                        addingStore ||
+                        !newStoreSubdomain?.trim() ||
+                        !newStoreAlias?.trim() ||
+                        !newClientId?.trim() ||
+                        !newClientSecret?.trim()
+                      }
+                      className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-10 font-medium shadow-lg shadow-green-600/20"
+                    >
+                      {addingStore ? 'Redirecting…' : 'Save & connect'}
+                    </Button>
+                    <p className="text-sm text-gray-500">
+                      Continue to Shopify to authorize this store
+                    </p>
+                  </div>
                 </div>
                 <div className="text-center pt-6 border-t border-gray-200">
-                  <a href="/guide" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-[#4CF365] transition-colors">
-                    Need help? Learn how to get your access token →
+                  <a
+                    href="/guide"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-[#4CF365] transition-colors"
+                  >
+                    How to connect your store (custom app + OAuth) →
                   </a>
                 </div>
               </div>
@@ -460,8 +560,8 @@ export default function DashboardPage() {
                       <div className="w-px h-12 bg-gray-900 my-1.5"></div>
                     </div>
                     <div className="flex-1">
-                      <h4 className="text-sm font-medium text-gray-900">Choose Plan</h4>
-                      <p className="text-xs text-gray-400 mt-0.5">Selected your subscription</p>
+                      <h4 className="text-sm font-medium text-gray-900">Get started</h4>
+                      <p className="text-xs text-gray-400 mt-0.5">Signed in and ready</p>
                     </div>
                   </div>
 
@@ -499,10 +599,17 @@ export default function DashboardPage() {
           {/* Import Mode Selection */}
           {!importMode && (
             <div className="flex flex-col gap-4 max-w-xl w-full">
+              {!selectedStoreReady && selectedStore && (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Finish authorizing this store in Shopify (you should have been redirected after clicking Save &amp; connect), then import will work.
+                </p>
+              )}
               {/* Product Import Card */}
               <button
-                onClick={() => setImportMode('product')}
-                className="bg-white border-2 border-gray-200 hover:border-green-500 rounded-xl p-5 transition-all hover:shadow-lg group"
+                type="button"
+                disabled={!selectedStoreReady}
+                onClick={() => selectedStoreReady && setImportMode('product')}
+                className="bg-white border-2 border-gray-200 hover:border-green-500 rounded-xl p-5 transition-all hover:shadow-lg group disabled:opacity-50 disabled:pointer-events-none disabled:hover:border-gray-200"
               >
                 <div className="flex items-start gap-4">
                   <div className="p-2.5 bg-green-50 rounded-lg group-hover:bg-green-100 transition-colors">
@@ -519,8 +626,10 @@ export default function DashboardPage() {
 
               {/* Collection Import Card */}
               <button
-                onClick={() => setImportMode('collection')}
-                className="bg-white border-2 border-gray-200 hover:border-green-500 rounded-xl p-5 transition-all hover:shadow-lg group"
+                type="button"
+                disabled={!selectedStoreReady}
+                onClick={() => selectedStoreReady && setImportMode('collection')}
+                className="bg-white border-2 border-gray-200 hover:border-green-500 rounded-xl p-5 transition-all hover:shadow-lg group disabled:opacity-50 disabled:pointer-events-none disabled:hover:border-gray-200"
               >
                 <div className="flex items-start gap-4">
                   <div className="p-2.5 bg-green-50 rounded-lg group-hover:bg-green-100 transition-colors">
@@ -686,44 +795,114 @@ export default function DashboardPage() {
       {/* Add Store Modal */}
       {showAddStoreModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-md w-full shadow-xl">
-            <h3 className="text-gray-900 text-lg font-semibold mb-6">Add Shopify Store</h3>
-                      <div className="space-y-5">
-                        <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Store URL</label>
-                <Input value={newStoreUrl} onChange={(e) => setNewStoreUrl(e.target.value)}
-                       placeholder="your-store.myshopify.com"
-                                 className="bg-white border-gray-300 text-gray-900 h-11" />
-                  </div>
-                        <div>
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Access Token</label>
-                <Input value={newStoreToken} onChange={(e) => setNewStoreToken(e.target.value)}
-                       placeholder="shpat_..." type="password"
-                                 className="bg-white border-gray-300 text-gray-900 h-11" />
+          <div className="bg-white border border-gray-200 rounded-xl p-6 max-w-lg w-full shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-4 mb-2">
+              <h3 className="text-gray-900 text-lg font-semibold">Add new store</h3>
+              <button
+                type="button"
+                className="text-gray-400 hover:text-gray-700 text-xl leading-none px-1"
+                aria-label="Close"
+                onClick={() => {
+                  setShowAddStoreModal(false);
+                  resetConnectForm();
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-6">How to connect your store — see the integration guide for screenshots and scopes.</p>
+            <div className="space-y-5">
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2 block">Domain name</p>
+                <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                  <span className="text-gray-500 text-sm shrink-0">https://</span>
+                  <Input
+                    value={newStoreSubdomain}
+                    onChange={(e) => setNewStoreSubdomain(e.target.value)}
+                    placeholder="your-store"
+                    className="bg-white border-gray-300 text-gray-900 h-11 min-w-[6rem] flex-1"
+                  />
+                  <span className="text-gray-500 text-sm shrink-0">.myshopify.com</span>
                 </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Alias</label>
+                <Input
+                  value={newStoreAlias}
+                  onChange={(e) => setNewStoreAlias(e.target.value)}
+                  placeholder="Label in Pullu"
+                  className="bg-white border-gray-300 text-gray-900 h-11"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Client ID</label>
+                <Input
+                  value={newClientId}
+                  onChange={(e) => setNewClientId(e.target.value)}
+                  placeholder="Dev Dashboard → app → Settings → Credentials"
+                  className="bg-white border-gray-300 text-gray-900 h-11"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Secret</label>
+                <Input
+                  value={newClientSecret}
+                  onChange={(e) => setNewClientSecret(e.target.value)}
+                  type="password"
+                  className="bg-white border-gray-300 text-gray-900 h-11"
+                />
+              </div>
               {storeError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-red-600 text-sm">{storeError}</p>
-              </div>
+                </div>
               )}
-              <div className="flex gap-3 pt-2">
-                <Button onClick={() => { setShowAddStoreModal(false); setNewStoreUrl(''); setNewStoreToken(''); setStoreError(null); }}
-                        variant="outline" className="flex-1 bg-transparent border-gray-300 text-gray-700 hover:bg-gray-50">
+              <div className="space-y-3 pt-2">
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    onClick={startShopifyOAuth}
+                    disabled={
+                      addingStore ||
+                      !newStoreSubdomain?.trim() ||
+                      !newStoreAlias?.trim() ||
+                      !newClientId?.trim() ||
+                      !newClientSecret?.trim()
+                    }
+                    className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-10 font-medium shadow-lg shadow-green-600/20"
+                  >
+                    {addingStore ? 'Redirecting…' : 'Save & connect'}
+                  </Button>
+                  <p className="text-sm text-gray-500">
+                    Continue to Shopify to authorize this store
+                  </p>
+                </div>
+                <Button
+                  onClick={() => {
+                    setShowAddStoreModal(false);
+                    resetConnectForm();
+                  }}
+                  variant="outline"
+                  className="w-full bg-transparent border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
                   Cancel
                 </Button>
-                <Button onClick={addStore} disabled={addingStore || !newStoreUrl || !newStoreToken}
-                        className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white">
-                  {addingStore ? 'Adding...' : 'Add Store'}
-                </Button>
-                          </div>
-                </div>
               </div>
+              <a
+                href="/guide"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center text-sm text-green-700 hover:underline"
+              >
+                Open integration guide
+              </a>
+            </div>
           </div>
+        </div>
       )}
       </div>
       </>
       )}
     </div>
-    </SubscriptionGate>
   );
 }

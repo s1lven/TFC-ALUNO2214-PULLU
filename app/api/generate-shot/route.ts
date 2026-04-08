@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
-    // Parse the request body
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     
     // Extract the form data
@@ -33,13 +41,11 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Get FAL API key from environment variable
-    const FAL_KEY = process.env.FAL_API_KEY || "4d636fee-a89a-4b45-8e43-2cb32649f691:8992a884808a68aeacf830248078d420"
-    
+    const FAL_KEY = process.env.FAL_API_KEY?.trim()
     if (!FAL_KEY) {
       return NextResponse.json({
         success: false,
-        message: 'FAL API key not configured'
+        message: 'FAL API key not configured',
       }, { status: 500 })
     }
 

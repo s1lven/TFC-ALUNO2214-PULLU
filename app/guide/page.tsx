@@ -1,267 +1,109 @@
-'use client';
-
-import { Button } from '@/components/ui/button';
+import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { SHOPIFY_SCOPES_DOCUMENTATION } from '@/lib/shopify/scopes';
+
+const SITE = 'https://pullu.app';
 
 export default function GuidePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-neutral-950 to-neutral-900">
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        {/* Back Button */}
-        <Link href="/dashboard/product-listing">
-          <Button
-            variant="ghost"
-            className="text-neutral-400 hover:text-white mb-8"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Dashboard
-          </Button>
+      <div className="mx-auto max-w-3xl px-6 py-10">
+        <Link
+          href="/dashboard"
+          className="group mb-8 inline-flex items-center gap-2 rounded-lg py-2 pl-2 pr-3 text-sm font-medium text-neutral-400 transition-colors hover:bg-white/5 hover:text-green-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-500"
+        >
+          <ArrowLeft className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5" aria-hidden />
+          Dashboard
         </Link>
 
-        {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center bg-green-500/10 border border-green-500/30 rounded-xl p-4 mb-6">
-            <Image src="/shopify.png" alt="Shopify" width={48} height={48} className="object-contain" />
+        <div className="mb-10 text-center">
+          <div className="mb-5 inline-flex items-center justify-center rounded-xl border border-green-500/30 bg-green-500/10 p-4">
+            <Image src="/shopify.png" alt="Shopify" width={44} height={44} className="object-contain" />
           </div>
-          <h1 className="text-4xl font-bold text-white mb-3">
-            How to Connect Your Shopify Store
-          </h1>
-          <p className="text-neutral-400 text-lg">
-            Follow these simple steps to get your store credentials
+          <h1 className="mb-2 text-3xl font-bold text-white">Connect Shopify to Pullu</h1>
+          <p className="mx-auto max-w-lg text-neutral-400">
+            Create a custom app in Shopify, paste two values into Pullu, approve access once.
           </p>
         </div>
 
-        {/* Guide Content */}
-        <div className="space-y-8">
-          {/* Step 1 */}
-          <div className="bg-neutral-900/50 backdrop-blur border border-neutral-800 rounded-xl p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-green-500/20 border border-green-500/30 rounded-lg flex items-center justify-center">
-                <span className="text-green-400 font-bold text-lg">1</span>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-semibold text-white mb-3">
-                  Get Your Store URL
-                </h2>
-                <p className="text-neutral-300 mb-3">
-                  Your store URL is the domain you use to access your Shopify admin. It follows this format:
-                </p>
-                <div className="bg-neutral-800/50 border border-neutral-700 rounded-lg p-4 mb-3">
-                  <code className="text-green-400 text-sm">
-                    your-store-name.myshopify.com
-                  </code>
-                </div>
-                <p className="text-neutral-400 text-sm">
-                  💡 You can find this in your browser&apos;s address bar when you&apos;re logged into your Shopify admin.
-                </p>
+        <div className="space-y-6">
+          <Section title="1. Create app in Shopify">
+            <p className="text-neutral-300">
+              In Shopify admin: <strong className="text-white">Settings</strong> →{' '}
+              <strong className="text-white">Apps and sales channels</strong> →{' '}
+              <strong className="text-white">Develop apps</strong> → open the Dev Dashboard →{' '}
+              <strong className="text-white">Create app</strong>. Name it anything (e.g. Pullu).
+            </p>
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+              <p className="mb-2 text-sm font-medium text-white">App URL</p>
+              <code className="break-all text-sm text-green-400">{SITE}/</code>
+            </div>
+
+            <div>
+              <p className="mb-2 text-sm text-white">Admin API scopes — enable these, then release a new app version:</p>
+              <div className="rounded-lg border border-neutral-700 bg-neutral-950 p-3">
+                <code className="whitespace-pre-wrap break-all text-xs text-green-300">
+                  {SHOPIFY_SCOPES_DOCUMENTATION}
+                </code>
               </div>
             </div>
-          </div>
 
-          {/* Step 2 */}
-          <div className="bg-neutral-900/50 backdrop-blur border border-neutral-800 rounded-xl p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-green-500/20 border border-green-500/30 rounded-lg flex items-center justify-center">
-                <span className="text-green-400 font-bold text-lg">2</span>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-semibold text-white mb-3">
-                  Create a Custom App
-                </h2>
-                <ol className="space-y-3 text-neutral-300">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Log in to your Shopify admin panel</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Go to <strong className="text-white">Settings</strong> (bottom left)</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Click on <strong className="text-white">Apps and sales channels</strong></span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Click <strong className="text-white">Develop apps</strong> at the top</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Click <strong className="text-white">Create an app</strong></span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Give it a name (e.g., &quot;Product Importer&quot;)</span>
-                  </li>
-                </ol>
-              </div>
-            </div>
-          </div>
+            <p className="text-neutral-300 text-sm">
+              Open <strong className="text-white">Settings → Credentials</strong> and copy the{' '}
+              <strong className="text-white">Client ID</strong> and{' '}
+              <strong className="text-white">Client secret</strong>.
+            </p>
+          </Section>
 
-          {/* Step 3 */}
-          <div className="bg-neutral-900/50 backdrop-blur border border-neutral-800 rounded-xl p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-green-500/20 border border-green-500/30 rounded-lg flex items-center justify-center">
-                <span className="text-green-400 font-bold text-lg">3</span>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-semibold text-white mb-3">
-                  Configure API Scopes
-                </h2>
-                <p className="text-neutral-300 mb-3">
-                  After creating the app, you need to configure its permissions:
-                </p>
-                <ol className="space-y-3 text-neutral-300 mb-4">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Click on <strong className="text-white">Configure Admin API scopes</strong></span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Select these permissions:</span>
-                  </li>
-                </ol>
-                <div className="bg-neutral-800/50 border border-neutral-700 rounded-lg p-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
-                    <code className="text-sm text-neutral-300">read_products</code>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
-                    <code className="text-sm text-neutral-300">write_products</code>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
-                    <code className="text-sm text-neutral-300">read_product_listings</code>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
-                    <code className="text-sm text-neutral-300">write_product_listings</code>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
-                    <code className="text-sm text-neutral-300">read_publications</code>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-400">✓</span>
-                    <code className="text-sm text-neutral-300">write_publications</code>
-                  </div>
-                </div>
-                <p className="text-neutral-400 text-sm mt-3">
-                  💡 These permissions allow the app to read and create products in your store.
-                </p>
-              </div>
-            </div>
-          </div>
+          <Section title="2. Add store in Pullu">
+            <p className="text-neutral-300">
+              Go to{' '}
+              <Link href="/dashboard" className="text-green-400 hover:text-green-300">
+                {SITE}/dashboard
+              </Link>
+              , sign in, then <strong className="text-white">Add store</strong>. Enter your{' '}
+              <code className="text-green-400">.myshopify.com</code> domain, an optional alias, and the Client ID
+              and secret. Finish in Shopify; use the same browser for the whole flow.
+            </p>
+          </Section>
 
-          {/* Step 4 */}
-          <div className="bg-neutral-900/50 backdrop-blur border border-neutral-800 rounded-xl p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-green-500/20 border border-green-500/30 rounded-lg flex items-center justify-center">
-                <span className="text-green-400 font-bold text-lg">4</span>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-semibold text-white mb-3">
-                  Install the App & Get Access Token
-                </h2>
-                <ol className="space-y-3 text-neutral-300">
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Click <strong className="text-white">Save</strong> on the configuration page</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Go to the <strong className="text-white">API credentials</strong> tab</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Click <strong className="text-white">Install app</strong></span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>After installation, you&apos;ll see the <strong className="text-white">Admin API access token</strong></span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-green-400 mt-1">•</span>
-                    <span>Click <strong className="text-white">Reveal token once</strong> and copy it</span>
-                  </li>
-                </ol>
-                <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg p-4 mt-4">
-                  <p className="text-amber-400 text-sm flex items-start gap-2">
-                    <span className="text-lg">⚠️</span>
-                    <span>
-                      <strong>Important:</strong> Save this token somewhere safe! Shopify will only show it once. If you lose it, you&apos;ll need to generate a new one.
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Section title="If something fails">
+            <ul className="list-disc space-y-2 pl-5 text-sm text-neutral-300">
+              <li>
+                <strong className="text-white">Credentials</strong> — Check ID and secret; app version must be released.
+              </li>
+              <li>
+                <strong className="text-white">Scopes</strong> — Add every scope above, release again, reconnect.
+              </li>
+              <li>
+                <strong className="text-white">Stuck</strong> — Remove the store in Pullu and add it again from step 2.
+              </li>
+            </ul>
+          </Section>
 
-          {/* Step 5 */}
-          <div className="bg-neutral-900/50 backdrop-blur border border-neutral-800 rounded-xl p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-green-500/20 border border-green-500/30 rounded-lg flex items-center justify-center">
-                <span className="text-green-400 font-bold text-lg">5</span>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-semibold text-white mb-3">
-                  Connect Your Store
-                </h2>
-                <p className="text-neutral-300 mb-4">
-                  Now you have everything you need! Go back to the dashboard and enter:
-                </p>
-                <div className="space-y-3">
-                  <div className="bg-neutral-800/50 border border-neutral-700 rounded-lg p-3">
-                    <p className="text-neutral-400 text-sm mb-1">Store URL</p>
-                    <code className="text-green-400 text-sm">your-store-name.myshopify.com</code>
-                  </div>
-                  <div className="bg-neutral-800/50 border border-neutral-700 rounded-lg p-3">
-                    <p className="text-neutral-400 text-sm mb-1">Access Token</p>
-                    <code className="text-green-400 text-sm">shpat_xxxxxxxxxxxxxxxxxxxx</code>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <a
+            href="https://shopify.dev/docs/apps/auth/oauth"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-xl border border-blue-700/30 bg-blue-900/20 p-4 text-sm text-blue-400 transition-colors hover:text-blue-300"
+          >
+            Shopify OAuth docs
+            <ExternalLink className="h-4 w-4" />
+          </a>
 
-          {/* Help Section */}
-          <div className="bg-blue-900/20 border border-blue-700/30 rounded-xl p-6">
-            <div className="flex items-start gap-4">
-              <svg className="w-6 h-6 text-blue-400 flex-shrink-0 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <h3 className="text-lg font-semibold text-white mb-2">Need More Help?</h3>
-                <p className="text-neutral-300 mb-4">
-                  If you&apos;re having trouble, check out Shopify&apos;s official documentation or contact our support team.
-                </p>
-                <a
-                  href="https://help.shopify.com/en/manual/apps/app-types/custom-apps"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors text-sm"
-                >
-                  Shopify Documentation
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Back to Dashboard Button */}
-          <div className="text-center pt-4">
-            <Link href="/dashboard/product-listing">
-              <Button className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-8 h-12 text-base font-medium shadow-lg shadow-green-600/20">
-                Go Back to Dashboard
-              </Button>
-            </Link>
-          </div>
         </div>
       </div>
     </div>
   );
 }
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 backdrop-blur">
+      <h2 className="mb-4 text-lg font-semibold text-white">{title}</h2>
+      <div className="space-y-4 text-sm">{children}</div>
+    </div>
+  );
+}

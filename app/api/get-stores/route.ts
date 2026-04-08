@@ -15,10 +15,11 @@ export async function GET() {
       );
     }
 
-    // Fetch stores for the current user
     const { data: stores, error: storesError } = await supabase
       .from('shopify_stores')
-      .select('*')
+      .select(
+        'id, user_id, shopify_store_url, store_name, store_alias, connection_status, shopify_client_id, created_at'
+      )
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
