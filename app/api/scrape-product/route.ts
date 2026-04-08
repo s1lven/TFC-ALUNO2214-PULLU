@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isPublicHttpUrlForFetch } from '@/lib/security/public-url';
 import { fetchShopifyPublicJson } from '@/lib/scrape/shopify-public-json';
-import { extractShopifyProductHandle } from '@/lib/scrape/shopify-url';
+import { extractShopifyProductHandle, extractShopifyLocale } from '@/lib/scrape/shopify-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +35,9 @@ export async function POST(request: NextRequest) {
 
     const domain = productUrl.hostname;
     const productHandle = extractShopifyProductHandle(productUrl.pathname);
+    // Preserve locale so Shopify returns the correct market's prices
+    const locale = extractShopifyLocale(productUrl.pathname);
+    const localePrefix = locale ? `/${locale}` : '';
 
     if (!productHandle) {
       return NextResponse.json(
@@ -43,7 +46,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const productJsonUrl = `https://${domain}/products/${productHandle}.json`;
+    const productJsonUrl = `https://${domain}${localePrefix}/products/${productHandle}.json`;
 
     console.log('Fetching:', productJsonUrl);
 

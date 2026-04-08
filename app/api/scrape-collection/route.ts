@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isPublicHttpUrlForFetch } from '@/lib/security/public-url';
 import { fetchShopifyPublicJson } from '@/lib/scrape/shopify-public-json';
-import { extractShopifyCollectionHandle } from '@/lib/scrape/shopify-url';
+import { extractShopifyCollectionHandle, extractShopifyLocale } from '@/lib/scrape/shopify-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +35,10 @@ export async function POST(request: NextRequest) {
 
     const domain = collectionUrl.hostname;
     const collectionHandle = extractShopifyCollectionHandle(collectionUrl.pathname);
+    // Preserve the locale prefix so Shopify serves the correct market's prices
+    // instead of routing by Vercel server IP (which returns USD for non-US stores).
+    const locale = extractShopifyLocale(collectionUrl.pathname);
+    const localePrefix = locale ? `/${locale}` : '';
 
     if (!collectionHandle) {
       return NextResponse.json(
@@ -43,7 +47,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const collectionJsonUrl = `https://${domain}/collections/${collectionHandle}.json`;
+    const collectionJsonUrl = `https://${domain}${localePrefix}/collections/${collectionHandle}.json`;
 
     console.log('Fetching collection:', collectionJsonUrl);
 
@@ -61,7 +65,7 @@ export async function POST(request: NextRequest) {
     let hasMore = true;
 
     while (hasMore) {
-      const productsUrl = `https://${domain}/collections/${collectionHandle}/products.json?page=${page}&limit=250`;
+      const productsUrl = `https://${domain}${localePrefix}/collections/${collectionHandle}/products.json?page=${page}&limit=250`;
       console.log(`Fetching products page ${page}:`, productsUrl);
 
       let productsData: { products?: unknown[] };
