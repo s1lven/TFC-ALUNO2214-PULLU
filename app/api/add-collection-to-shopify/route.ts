@@ -216,10 +216,16 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
         // Primary: variant_ids lookup
         let newImageId = variantToImageMap.get(String(originalVariant.id));
 
-        // Fallback: featured_image.id on the variant
+        // Fallback 1: featured_image.id on the variant
         if (!newImageId) {
           const sourceImageId = resolveVariantSourceImageId(originalVariant);
           if (sourceImageId) newImageId = indexImageMap.get(sourceImageId);
+        }
+
+        // Fallback 2: product-level images (no variant_ids / featured_image set at source)
+        // → assign first image so every variant has something linked rather than nothing.
+        if (!newImageId && createdImages.length > 0) {
+          newImageId = Number(createdImages[0].id);
         }
 
         if (!newImageId) continue;

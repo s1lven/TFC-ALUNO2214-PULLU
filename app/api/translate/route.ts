@@ -68,17 +68,21 @@ export async function POST(request: NextRequest) {
     const targetLanguageName = languageMap[targetLang] || targetLang;
 
     // Build the system prompt
-    let systemPrompt = `You are a professional e-commerce translator and copywriter. Your task is to translate product information to ${targetLanguageName}.
+    let systemPrompt = `You are a professional e-commerce translator. Translate ALL text to ${targetLanguageName}.
 
-IMPORTANT RULES:
-1. Preserve HTML tags exactly - only translate text content between tags
-2. Maintain the JSON structure exactly as provided
-3. Use context from the entire product to make accurate translations (e.g., "negro" in Spanish context)
-4. Keep brand names, measurements, and technical terms appropriate for the target market
-5. Return ONLY valid JSON, no additional text`;
-    
+RULES:
+1. Preserve HTML tags exactly — only translate the text content between tags.
+2. Return the EXACT same JSON structure (same keys, same nesting).
+3. Translate EVERY text value without exception, including option names and option values:
+   - Colors: Green→Verde, Red→Rojo, Blue→Azul, Black→Negro, White→Blanco, etc.
+   - Sizes: Small→Pequeño, Large→Grande, Medium→Mediano, etc.
+   - Materials: Cotton→Algodón, Leather→Cuero, etc.
+   - Option names: Color→Color, Size→Talla/Tamaño, Material→Material, etc.
+4. Keep numeric values, SKUs, and URLs unchanged.
+5. Return ONLY valid JSON — no markdown, no code fences, no extra text.`;
+
     if (enhancementPrompt) {
-      systemPrompt += `\n6. Apply this enhancement to the title and description: ${enhancementPrompt}`;
+      systemPrompt += `\n6. Also apply this enhancement to the title and description: ${enhancementPrompt}`;
     }
 
     // Build the input JSON structure
@@ -87,11 +91,11 @@ IMPORTANT RULES:
       description: productData.description,
       options: productData.options?.map((opt: { name: string; values: string[] }) => ({
         name: opt.name,
-        values: opt.values
-      }))
+        values: opt.values,
+      })),
     };
 
-    const userPrompt = `Translate this product data to ${targetLanguageName}. Return the exact same JSON structure with translated values:
+    const userPrompt = `Translate ALL text values to ${targetLanguageName}. Return the exact same JSON structure:
 
 ${JSON.stringify(inputData, null, 2)}`;
 
@@ -122,7 +126,17 @@ ${JSON.stringify(inputData, null, 2)}`;
     }
 
     const result = await response.json();
-    const translatedData = JSON.parse(result.choices[0].message.content);
+    let translatedData = JSON.parse(result.choices[0].message.content);
+
+    // GPT sometimes wraps in a single root key — unwrap to get the expected shape.
+    const keys = Object.keys(translatedData);
+    if (
+      keys.length === 1 &&
+      !('title' in translatedData) &&
+      typeof translatedData[keys[0]] === 'object'
+    ) {
+      translatedData = translatedData[keys[0]];
+    }
 
     return NextResponse.json({
       translatedData,
