@@ -2,6 +2,8 @@
 
 Import products from any Shopify store into your own — with translation, price adjustment, and direct Shopify Admin API push.
 
+**Live:** [https://pullu.app](https://pullu.app)
+
 ## Stack
 
 - **Next.js 16** (App Router) + **React 19** + TypeScript
