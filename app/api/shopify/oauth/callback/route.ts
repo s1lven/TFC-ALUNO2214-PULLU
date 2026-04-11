@@ -6,6 +6,7 @@ import {
   verifyOAuthHmac,
 } from '@/lib/shopify/oauth';
 import { resolvePublicAppBaseUrl } from '@/lib/shopify/public-app-url';
+import { devLog } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
@@ -126,8 +127,11 @@ export async function GET(request: NextRequest) {
         const shopJson = (await shopRes.json()) as { shop?: { name?: string } };
         shopName = shopJson.shop?.name ?? null;
       }
-    } catch {
-      /* keep alias */
+    } catch (e) {
+      devLog(
+        'shop.json fetch in OAuth callback failed:',
+        e instanceof Error ? e.message : e,
+      );
     }
 
     const { error: updateError } = await supabase
@@ -142,7 +146,6 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id);
 
     if (updateError) {
-      console.error('shopify oauth callback update:', updateError);
       return redirectDashboard({
         shopify_error: 'db_error',
         shopify_message: 'Token received but saving failed. Try again.',
@@ -151,7 +154,6 @@ export async function GET(request: NextRequest) {
 
     return redirectDashboard({ shopify_connected: '1' });
   } catch (error) {
-    console.error('shopify oauth callback:', error);
     return redirectDashboard({
       shopify_error: 'unexpected',
       shopify_message: error instanceof Error ? error.message : 'Unexpected error',

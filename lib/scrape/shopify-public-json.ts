@@ -3,6 +3,7 @@
  * doesn't serve a localised (wrong-currency) price instead of the base price. */
 export async function fetchShopifyPublicJson<T = unknown>(
   jsonUrl: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _storeHost: string,
 ): Promise<T> {
   const res = await fetch(jsonUrl, {

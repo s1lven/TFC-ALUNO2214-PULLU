@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { HugeiconsIcon } from '@hugeicons/react';
+import { ArrowLeftFreeIcons, LinkSquareFreeIcons } from '@hugeicons/core-free-icons';
 import { SHOPIFY_SCOPES_DOCUMENTATION } from '@/lib/shopify/scopes';
 
 const SITE = 'https://pullu.app';
@@ -14,7 +15,7 @@ export default function GuidePage() {
           href="/dashboard"
           className="group mb-8 inline-flex items-center gap-2 rounded-lg py-2 pl-2 pr-3 text-sm font-medium text-neutral-400 transition-colors hover:bg-white/5 hover:text-green-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-500"
         >
-          <ArrowLeft className="h-4 w-4 shrink-0 transition-transform group-hover:-translate-x-0.5" aria-hidden />
+          <HugeiconsIcon icon={ArrowLeftFreeIcons} size={16} className="shrink-0 transition-transform group-hover:-translate-x-0.5" aria-hidden />
           Dashboard
         </Link>
 
@@ -90,7 +91,7 @@ export default function GuidePage() {
             className="flex items-center gap-2 rounded-xl border border-blue-700/30 bg-blue-900/20 p-4 text-sm text-blue-400 transition-colors hover:text-blue-300"
           >
             Shopify OAuth docs
-            <ExternalLink className="h-4 w-4" />
+            <HugeiconsIcon icon={LinkSquareFreeIcons} size={16} />
           </a>
 
         </div>

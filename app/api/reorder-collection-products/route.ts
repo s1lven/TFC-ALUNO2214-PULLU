@@ -1,6 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { jsonError, jsonSuccess } from '@/lib/api/http';
+import { devLog } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/shopify/store-access';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 // Helper function to make GraphQL requests to Shopify
 async function shopifyGraphQL(shopifyStoreUrl: string, shopifyToken: string, query: string, variables: Record<string, unknown> = {}) {
@@ -31,38 +34,28 @@ export async function POST(request: NextRequest) {
   try {
     const { collectionGid, productIds, storeId } = await request.json();
 
-    if (!storeId || !collectionGid || !productIds) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
+    if (!storeId || !collectionGid || !productIds) return jsonError('Missing required fields', 400);
 
     const supabase = await createClient();
-    
-    // Get the current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
-    // Fetch store credentials
+    if (userError || !user) return jsonError('Unauthorized', 401);
+    if (!checkRateLimit(`reorder-collection:${user.id}`, 30)) return jsonError('Too many requests. Please slow down.', 429);
+
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
-      .select('*')
+      .select('id, user_id, shopify_store_url, shopify_token, connection_status')
       .eq('id', storeId)
       .eq('user_id', user.id)
       .single();
 
-    if (storeError || !store) {
-      return NextResponse.json({ error: 'Store not found' }, { status: 404 });
-    }
+    if (storeError || !store) return jsonError('Store not found', 404);
 
     const accessToken = getShopifyAccessTokenForApi(store);
-    if (!accessToken) {
-      return NextResponse.json({ error: STORE_NOT_CONNECTED_MESSAGE }, { status: 400 });
-    }
+    if (!accessToken) return jsonError(STORE_NOT_CONNECTED_MESSAGE, 400);
 
     // Reorder products in collection using GraphQL
-    console.log('🔄 Reordering', productIds.length, 'products in collection', collectionGid);
+    devLog('🔄 Reordering', productIds.length, 'products in collection', collectionGid);
     
     // First, update collection to manual sort order
     const updateCollectionMutation = `
@@ -92,9 +85,12 @@ export async function POST(request: NextRequest) {
           }
         }
       );
-      console.log('✅ Collection set to MANUAL sort order');
+      devLog('✅ Collection set to MANUAL sort order');
     } catch (error) {
-      console.error('Warning: Could not set manual sort order:', error);
+      devLog(
+        'collectionUpdate (MANUAL sort) skipped:',
+        error instanceof Error ? error.message : error,
+      );
     }
 
     // Now reorder the products
@@ -119,7 +115,7 @@ export async function POST(request: NextRequest) {
       newPosition: index.toString()
     }));
 
-    console.log('📦 Moving', moves.length, 'products to their correct positions');
+    devLog('📦 Moving', moves.length, 'products to their correct positions');
 
     const data = await shopifyGraphQL(
       store.shopify_store_url,
@@ -129,20 +125,12 @@ export async function POST(request: NextRequest) {
     );
 
     if (data.collectionReorderProducts.userErrors.length > 0) {
-      console.error('❌ Reorder errors:', data.collectionReorderProducts.userErrors);
-      return NextResponse.json(
-        { success: false, error: JSON.stringify(data.collectionReorderProducts.userErrors) },
-        { status: 400 }
-      );
+      return jsonError(JSON.stringify(data.collectionReorderProducts.userErrors), 400);
     }
 
-    console.log('✅ Products reordered successfully!');
-    return NextResponse.json({ success: true });
+    devLog('Products reordered successfully');
+    return jsonSuccess({});
   } catch (error) {
-    console.error('Error reordering products:', error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to reorder' },
-      { status: 500 }
-    );
+    return jsonError(error instanceof Error ? error.message : 'Failed to reorder', 500);
   }
 }

@@ -1,71 +1,51 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/shopify/store-access';
+import { jsonError, jsonOk } from '@/lib/api/http';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { devLog } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    
-    // Get the current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+
+    if (userError || !user) return jsonError('Unauthorized', 401);
+    if (!checkRateLimit(`refresh-store-name:${user.id}`, 10)) return jsonError('Too many requests. Please slow down.', 429);
 
     const { storeId } = await request.json();
 
-    if (!storeId) {
-      return NextResponse.json({ error: 'Store ID is required' }, { status: 400 });
-    }
+    if (!storeId) return jsonError('Store ID is required', 400);
 
-    // Fetch store credentials
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
-      .select('*')
+      .select('id, user_id, shopify_store_url, shopify_token, connection_status')
       .eq('id', storeId)
       .eq('user_id', user.id)
       .single();
 
-    if (storeError || !store) {
-      return NextResponse.json(
-        { error: 'Store not found' },
-        { status: 404 }
-      );
-    }
+    if (storeError || !store) return jsonError('Store not found', 404);
 
     const accessToken = getShopifyAccessTokenForApi(store);
-    if (!accessToken) {
-      return NextResponse.json({ error: STORE_NOT_CONNECTED_MESSAGE }, { status: 400 });
-    }
+    if (!accessToken) return jsonError(STORE_NOT_CONNECTED_MESSAGE, 400);
 
-    // Fetch shop info from Shopify
     let shopName = store.shopify_store_url.replace('.myshopify.com', '');
     try {
       const shopResponse = await fetch(
         `https://${store.shopify_store_url}/admin/api/2024-01/shop.json`,
-        {
-          method: 'GET',
-          headers: {
-            'X-Shopify-Access-Token': accessToken,
-          },
-        }
+        { headers: { 'X-Shopify-Access-Token': accessToken } },
       );
-
       if (shopResponse.ok) {
         const shopData = await shopResponse.json();
-        if (shopData.shop && shopData.shop.name) {
-          shopName = shopData.shop.name;
-        }
+        if (shopData.shop?.name) shopName = shopData.shop.name;
       }
     } catch (error) {
-      console.error('Failed to fetch shop name:', error);
+      devLog(
+        'shop.json fetch during refresh-store-name failed:',
+        error instanceof Error ? error.message : error,
+      );
     }
 
-    // Update store name in database
     const { data: updatedStore, error: updateError } = await supabase
       .from('shopify_stores')
       .update({ store_name: shopName })
@@ -75,23 +55,12 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (updateError) {
-      console.error('Error updating store name:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to update store name' },
-        { status: 500 }
-      );
+      return jsonError('Failed to update store name', 500);
     }
 
-    return NextResponse.json({
-      success: true,
-      store: updatedStore,
-    });
+    return jsonOk({ store: updatedStore });
   } catch (error) {
-    console.error('Error in refresh-store-name:', error);
-    return NextResponse.json(
-      { error: 'Failed to refresh store name' },
-      { status: 500 }
-    );
+    return jsonError('Failed to refresh store name', 500);
   }
 }
 

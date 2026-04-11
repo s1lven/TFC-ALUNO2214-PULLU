@@ -54,6 +54,11 @@ export default {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+        surface: '#F1F5F2',
+        brand: {
+          DEFAULT: '#7cfc5c',
+          hover: '#6ee84e',
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -76,5 +81,6 @@ export default {
       },
     },
   },
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   plugins: [require("tailwindcss-animate")],
 } satisfies Config;

@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { jsonError, jsonOk } from '@/lib/api/http';
+import { devLog } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { isPublicHttpUrlForFetch } from '@/lib/security/public-url';
 import { fetchShopifyPublicJson } from '@/lib/scrape/shopify-public-json';
 import { extractShopifyCollectionHandle, extractShopifyLocale } from '@/lib/scrape/shopify-url';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,26 +15,21 @@ export async function POST(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!user) return jsonError('Unauthorized', 401);
+    if (!checkRateLimit(`scrape-collection:${user.id}`, 20)) return jsonError('Too many requests. Please slow down.', 429);
 
     const { url } = await request.json();
 
-    if (!url) {
-      return NextResponse.json({ error: 'URL is required' }, { status: 400 });
-    }
+    if (!url) return jsonError('URL is required', 400);
 
     let collectionUrl;
     try {
       collectionUrl = new URL(url);
     } catch {
-      return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+      return jsonError('Invalid URL', 400);
     }
 
-    if (!isPublicHttpUrlForFetch(collectionUrl)) {
-      return NextResponse.json({ error: 'URL host is not allowed' }, { status: 400 });
-    }
+    if (!isPublicHttpUrlForFetch(collectionUrl)) return jsonError('URL host is not allowed', 400);
 
     const domain = collectionUrl.hostname;
     const collectionHandle = extractShopifyCollectionHandle(collectionUrl.pathname);
@@ -41,24 +39,19 @@ export async function POST(request: NextRequest) {
     const localePrefix = locale ? `/${locale}` : '';
 
     if (!collectionHandle) {
-      return NextResponse.json(
-        { error: 'Could not find a collection handle in the URL (use /collections/your-handle).' },
-        { status: 400 },
-      );
+      return jsonError('Could not find a collection handle in the URL (use /collections/your-handle).', 400);
     }
 
     const collectionJsonUrl = `https://${domain}${localePrefix}/collections/${collectionHandle}.json`;
 
-    console.log('Fetching collection:', collectionJsonUrl);
+    devLog('Fetching collection:', collectionJsonUrl);
 
     const collectionData = await fetchShopifyPublicJson<{ collection?: unknown }>(
       collectionJsonUrl,
       domain,
     );
 
-    if (!collectionData.collection) {
-      return NextResponse.json({ error: 'Collection not found' }, { status: 404 });
-    }
+    if (!collectionData.collection) return jsonError('Collection not found', 404);
 
     const products: unknown[] = [];
     let page = 1;
@@ -66,13 +59,12 @@ export async function POST(request: NextRequest) {
 
     while (hasMore) {
       const productsUrl = `https://${domain}${localePrefix}/collections/${collectionHandle}/products.json?page=${page}&limit=250`;
-      console.log(`Fetching products page ${page}:`, productsUrl);
+      devLog(`Fetching products page ${page}:`, productsUrl);
 
       let productsData: { products?: unknown[] };
       try {
         productsData = await fetchShopifyPublicJson<{ products?: unknown[] }>(productsUrl, domain);
       } catch (e) {
-        console.error(`Failed to fetch products page ${page}:`, e);
         break;
       }
 
@@ -88,18 +80,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`Fetched ${products.length} products from collection`);
+    devLog(`Fetched ${products.length} products from collection`);
 
-    return NextResponse.json({
-      ...collectionData.collection,
-      products: products,
+    return jsonOk({
+      ...(collectionData.collection as Record<string, unknown>),
+      products,
       productCount: products.length,
     });
   } catch (error) {
-    console.error('Collection scraping error:', error);
-    return NextResponse.json(
-      { error: `Failed to scrape collection: ${error instanceof Error ? error.message : 'Unknown error'}` },
-      { status: 500 },
-    );
+    return jsonError(`Failed to scrape collection: ${error instanceof Error ? error.message : 'Unknown error'}`, 500);
   }
 }

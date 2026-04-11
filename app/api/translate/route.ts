@@ -1,10 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { resolveOpenAiApiKeyForUser } from '@/lib/openai/user-api-key';
-
-// DeepL API (commented out - now using OpenAI)
-// const DEEPL_API_KEY = '2c211040-4971-47d7-aba8-4a6c86e37dc1:fx';
-// const DEEPL_API_URL = 'https://api-free.deepl.com/v2/translate';
+import { jsonError, jsonOk } from '@/lib/api/http';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const languageMap: Record<string, string> = {
   'EN-US': 'English',
@@ -41,28 +39,19 @@ export async function POST(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) {
-      return NextResponse.json({ error: 'Sign in required' }, { status: 401 });
-    }
+    if (!user) return jsonError('Sign in required', 401);
+    if (!checkRateLimit(`translate:${user.id}`, 300)) return jsonError('Too many requests. Please slow down.', 429);
 
     const OPENAI_API_KEY = await resolveOpenAiApiKeyForUser(user.id);
     if (!OPENAI_API_KEY) {
-      return NextResponse.json(
-        {
-          error: 'Add your OpenAI API key in Account settings to use translation.',
-        },
-        { status: 400 },
-      );
+      return jsonError('Add your OpenAI API key in Account settings to use translation.', 400);
     }
 
     const body = await request.json();
     const { productData, targetLang, enhancementPrompt } = body;
 
     if (!productData || !targetLang) {
-      return NextResponse.json(
-        { error: 'Product data and target language are required' },
-        { status: 400 }
-      );
+      return jsonError('Product data and target language are required', 400);
     }
 
     const targetLanguageName = languageMap[targetLang] || targetLang;
@@ -118,11 +107,7 @@ ${JSON.stringify(inputData, null, 2)}`;
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error:', errorText);
-      return NextResponse.json(
-        { error: `Translation failed: ${errorText}` },
-        { status: response.status }
-      );
+      return jsonError(`Translation failed: ${errorText}`, response.status);
     }
 
     const result = await response.json();
@@ -138,53 +123,9 @@ ${JSON.stringify(inputData, null, 2)}`;
       translatedData = translatedData[keys[0]];
     }
 
-    return NextResponse.json({
-      translatedData,
-      detectedSourceLang: 'auto',
-    });
-
-    /* DeepL implementation (commented out)
-    const params: Record<string, string> = {
-      text: text,
-      target_lang: targetLang,
-    };
-
-    if (text.includes('<') && text.includes('>')) {
-      params.tag_handling = 'html';
-    }
-
-    const response = await fetch(DEEPL_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams(params),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('DeepL API error:', errorText);
-      return NextResponse.json(
-        { error: `Translation failed: ${errorText}` },
-        { status: response.status }
-      );
-    }
-
-    const result = await response.json();
-    const translatedText = result.translations[0].text;
-
-    return NextResponse.json({
-      translatedText,
-      detectedSourceLang: result.translations[0].detected_source_language,
-    });
-    */
+    return jsonOk({ translatedData, detectedSourceLang: 'auto' });
   } catch (error) {
-    console.error('Error translating text:', error);
-    return NextResponse.json(
-      { error: 'Failed to translate text' },
-      { status: 500 }
-    );
+    return jsonError('Failed to translate text', 500);
   }
 }
 

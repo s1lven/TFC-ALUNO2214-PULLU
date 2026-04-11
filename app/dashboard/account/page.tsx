@@ -1,16 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-
-type KeyStatus = { configured: boolean; lastFour: string | null };
+import { AccountOpenAiKeyCard, type KeyStatus } from '@/components/dashboard/account/account-openai-key-card';
+import { AccountProfileCard } from '@/components/dashboard/account/account-profile-card';
+import { AccountDeleteAccountModal } from '@/components/dashboard/account/account-delete-account-modal';
+import { DashboardCenterSpinner } from '@/components/dashboard/dashboard-center-spinner';
 
 export default function AccountPage() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
   const [keyLoading, setKeyLoading] = useState(true);
   const [newKey, setNewKey] = useState('');
@@ -18,6 +22,14 @@ export default function AccountPage() {
   const [removing, setRemoving] = useState(false);
   const [keyMessage, setKeyMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const supabase = createClient();
+
+  const handleAccountDeleted = useCallback(async () => {
+    setDeleteModalOpen(false);
+    const client = createClient();
+    await client.auth.signOut();
+    router.push('/auth/login');
+    router.refresh();
+  }, [router]);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -129,139 +141,59 @@ export default function AccountPage() {
 
   if (loading) {
     return (
-      <div className="min-h-full p-8 flex items-center justify-center" style={{ backgroundColor: '#F1F5F2' }}>
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-gray-400 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
+      <div className="min-h-full p-8 flex items-center justify-center bg-surface">
+        <DashboardCenterSpinner />
       </div>
     );
   }
 
   return (
-    <div className="min-h-full p-8" style={{ backgroundColor: '#F1F5F2' }}>
+    <div className="min-h-full p-8 bg-surface">
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
+          <Link
+            href="/dashboard"
+            className="inline-block text-sm text-gray-600 hover:text-gray-900 mb-4 transition-colors"
+          >
+            ← Back to dashboard
+          </Link>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Account Settings</h1>
           <p className="text-gray-600 text-sm">Manage your account information</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Profile</h2>
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xl font-bold">
-                {user?.email?.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div className="flex-1">
-              <p className="text-gray-900 font-medium mb-1">{user?.email}</p>
-              <p className="text-sm text-gray-500">
-                {user?.created_at ? (
-                  <>
-                    Member since{' '}
-                    {new Date(user.created_at).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </>
-                ) : (
-                  'Member'
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
+        <AccountProfileCard user={user} />
 
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-1">OpenAI API key</h2>
+        <AccountOpenAiKeyCard
+          keyStatus={keyStatus}
+          keyLoading={keyLoading}
+          keyMessage={keyMessage}
+          newKey={newKey}
+          onNewKeyChange={setNewKey}
+          saving={saving}
+          removing={removing}
+          onSave={saveKey}
+          onRemove={removeKey}
+        />
+
+        <div className="mt-8 rounded-xl border border-red-200 bg-red-50/50 p-6">
+          <h2 className="text-base font-semibold text-gray-900 mb-1">Danger zone</h2>
           <p className="text-sm text-gray-600 mb-4">
-            AI translation and text enhancement use your key. The full secret is never shown again after you
-            save—only the last four characters.
+            Permanently delete your account and all associated data.
           </p>
-
-          {keyMessage ? (
-            <div
-              className={`mb-4 text-sm rounded-lg px-3 py-2 ${
-                keyMessage.type === 'ok'
-                  ? 'bg-green-50 text-green-800 border border-green-200'
-                  : 'bg-red-50 text-red-800 border border-red-200'
-              }`}
-            >
-              {keyMessage.text}
-            </div>
-          ) : null}
-
-          {keyLoading ? (
-            <p className="text-sm text-gray-500">Loading key status…</p>
-          ) : keyStatus?.configured ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-gray-700">Active key:</span>
-                <code className="text-sm bg-gray-100 px-2 py-1 rounded border border-gray-200">
-                  ••••••••{keyStatus.lastFour ?? '????'}
-                </code>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" disabled={removing} onClick={() => void removeKey()}>
-                  {removing ? 'Removing…' : 'Remove key'}
-                </Button>
-              </div>
-              <p className="text-xs text-gray-500">
-                To replace the key, paste a new one below and save. Your previous key will be overwritten.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-                <div className="flex-1 min-w-0">
-                  <label className="text-xs font-medium text-gray-700 block mb-1">New key (optional)</label>
-                  <Input
-                    type="password"
-                    autoComplete="off"
-                    placeholder="sk-…"
-                    value={newKey}
-                    onChange={(e) => setNewKey(e.target.value)}
-                    className="bg-white"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  className="bg-neutral-900 text-white hover:bg-neutral-800"
-                  disabled={saving || !newKey.trim()}
-                  onClick={() => void saveKey()}
-                >
-                  {saving ? 'Saving…' : 'Update key'}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Add your key below to use AI translation and enhancement.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-                <div className="flex-1 min-w-0">
-                  <label className="text-xs font-medium text-gray-700 block mb-1">OpenAI API key</label>
-                  <Input
-                    type="password"
-                    autoComplete="off"
-                    placeholder="sk-…"
-                    value={newKey}
-                    onChange={(e) => setNewKey(e.target.value)}
-                    className="bg-white"
-                  />
-                </div>
-                <Button
-                  type="button"
-                  className="bg-neutral-900 text-white hover:bg-neutral-800"
-                  disabled={saving || !newKey.trim()}
-                  onClick={() => void saveKey()}
-                >
-                  {saving ? 'Saving…' : 'Save key'}
-                </Button>
-              </div>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => setDeleteModalOpen(true)}
+            className="text-sm font-medium text-red-700 border border-red-300 bg-white hover:bg-red-50 rounded-md px-4 py-2 transition-colors"
+          >
+            Delete account
+          </button>
         </div>
+
+        <AccountDeleteAccountModal
+          open={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          onDeleted={() => void handleAccountDeleted()}
+        />
       </div>
     </div>
   );

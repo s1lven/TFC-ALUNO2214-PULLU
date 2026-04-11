@@ -1,6 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/shopify/store-access';
+import { jsonError, jsonOk } from '@/lib/api/http';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { devLog } from '@/lib/logger';
 import {
   buildScrapedToCreatedImageIdMap,
   matchCreatedVariantsToOriginals,
@@ -12,41 +15,25 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { title, handle, body_html, vendor, images, options, variants, taxable, trackQuantity, collectionIds, storeId, status, published } = body;
 
-    if (!storeId) {
-      return NextResponse.json({ error: 'Store ID is required' }, { status: 400 });
-    }
+    if (!storeId) return jsonError('Store ID is required', 400);
 
     const supabase = await createClient();
-    
-    // Get the current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
 
-    // Fetch store credentials
+    if (userError || !user) return jsonError('Unauthorized', 401);
+    if (!checkRateLimit(`add-to-shopify:${user.id}`, 60)) return jsonError('Too many requests. Please slow down.', 429);
+
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
-      .select('*')
+      .select('id, user_id, shopify_store_url, shopify_token, connection_status')
       .eq('id', storeId)
       .eq('user_id', user.id)
       .single();
 
-    if (storeError || !store) {
-      return NextResponse.json(
-        { error: 'Store not found' },
-        { status: 404 }
-      );
-    }
+    if (storeError || !store) return jsonError('Store not found', 404);
 
     const accessToken = getShopifyAccessTokenForApi(store);
-    if (!accessToken) {
-      return NextResponse.json({ error: STORE_NOT_CONNECTED_MESSAGE }, { status: 400 });
-    }
+    if (!accessToken) return jsonError(STORE_NOT_CONNECTED_MESSAGE, 400);
 
     // Construct the product data for Shopify
     const productData: { product: { title: string; handle?: string; body_html?: string; vendor: string; product_type: string; status: string; published?: boolean; published_scope: string | null; images: Array<{ src: string; alt: string }>; options?: Array<{ name: string; values: string[] }>; variants?: Array<Record<string, unknown>> } } = {
@@ -135,11 +122,7 @@ export async function POST(request: NextRequest) {
 
     if (!shopifyResponse.ok) {
       const errorText = await shopifyResponse.text();
-      console.error('Shopify API error:', errorText);
-      return NextResponse.json(
-        { error: `Shopify API error: ${errorText}` },
-        { status: shopifyResponse.status }
-      );
+      return jsonError(`Shopify API error: ${errorText}`, shopifyResponse.status);
     }
 
     const result = await shopifyResponse.json();
@@ -185,15 +168,13 @@ export async function POST(request: NextRequest) {
               }),
             },
           );
-          if (!putResponse.ok) {
-            console.error(
-              `Variant ${createdVariant.id} image update failed:`,
-              await putResponse.text(),
-            );
-          }
+
           await new Promise((resolve) => setTimeout(resolve, 100));
         } catch (error) {
-          console.error(`Failed to update variant ${createdVariant.id} image:`, error);
+          devLog(
+            'Variant image update failed:',
+            error instanceof Error ? error.message : error,
+          );
         }
       }
     }
@@ -221,26 +202,24 @@ export async function POST(request: NextRequest) {
 
           if (!collectResponse.ok) {
             const errorText = await collectResponse.text();
-            console.error(`Failed to add product to collection ${collectionId}:`, errorText);
-            // Don't fail the whole request if adding to collection fails
+            devLog(
+              'Add product to collection failed:',
+              collectResponse.status,
+              errorText.slice(0, 200),
+            );
           }
         } catch (collectError) {
-          console.error(`Error adding product to collection ${collectionId}:`, collectError);
-          // Don't fail the whole request if adding to collection fails
+          devLog(
+            'Add product to collection request failed:',
+            collectError instanceof Error ? collectError.message : collectError,
+          );
         }
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      product: result.product,
-    });
+    return jsonOk({ product: result.product });
   } catch (error) {
-    console.error('Error adding product to Shopify:', error);
-    return NextResponse.json(
-      { error: 'Failed to add product to Shopify store' },
-      { status: 500 }
-    );
+    return jsonError('Failed to add product to Shopify store', 500);
   }
 }
 

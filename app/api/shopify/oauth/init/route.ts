@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { jsonError, jsonOk } from '@/lib/api/http';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit } from '@/lib/rate-limit';
 import {
   buildAuthorizeUrl,
   generateOAuthNonce,
@@ -16,9 +18,8 @@ export async function POST(request: NextRequest) {
       error: userError,
     } = await supabase.auth.getUser();
 
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (userError || !user) return jsonError('Unauthorized', 401);
+    if (!checkRateLimit(`oauth-init:${user.id}`, 10)) return jsonError('Too many requests. Please slow down.', 429);
 
     const body = await request.json();
     const shopSubdomain = typeof body.shop_subdomain === 'string' ? body.shop_subdomain : '';
@@ -27,10 +28,7 @@ export async function POST(request: NextRequest) {
     const clientSecret = typeof body.client_secret === 'string' ? body.client_secret.trim() : '';
 
     if (!shopSubdomain || !storeAlias || !clientId || !clientSecret) {
-      return NextResponse.json(
-        { error: 'Domain, alias, client ID, and client secret are required' },
-        { status: 400 }
-      );
+      return jsonError('Domain, alias, client ID, and client secret are required', 400);
     }
 
     let shopifyHost: string;
@@ -39,10 +37,7 @@ export async function POST(request: NextRequest) {
         shopSubdomain.includes('.myshopify.com') ? shopSubdomain : `${shopSubdomain}.myshopify.com`
       );
     } catch (e) {
-      return NextResponse.json(
-        { error: e instanceof Error ? e.message : 'Invalid shop domain' },
-        { status: 400 }
-      );
+      return jsonError(e instanceof Error ? e.message : 'Invalid shop domain', 400);
     }
 
     const appBase = resolvePublicAppBaseUrl(request);
@@ -75,24 +70,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError || !store) {
-      console.error('shopify oauth init insert:', insertError);
-      return NextResponse.json({ error: 'Failed to save store connection' }, { status: 500 });
+      return jsonError('Failed to save store connection', 500);
     }
 
     const state = `${store.id}:${nonce}`;
-    const authorizationUrl = buildAuthorizeUrl({
-      shop: shopifyHost,
-      clientId,
-      redirectUri,
-      state,
-    });
+    const authorizationUrl = buildAuthorizeUrl({ shop: shopifyHost, clientId, redirectUri, state });
 
-    return NextResponse.json({
-      authorizationUrl,
-      storeId: store.id,
-    });
+    return jsonOk({ authorizationUrl, storeId: store.id });
   } catch (error) {
-    console.error('shopify oauth init:', error);
-    return NextResponse.json({ error: 'Failed to start Shopify connection' }, { status: 500 });
+    return jsonError('Failed to start Shopify connection', 500);
   }
 }

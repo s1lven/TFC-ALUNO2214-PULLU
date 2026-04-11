@@ -1,8 +1,14 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 
-export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY!,
-  );
+/** When provided (e.g. from a Server Component), avoids relying on client-inlined NEXT_PUBLIC_* at build time. */
+export type SupabaseBrowserConfig = {
+  url: string;
+  anonKey: string;
+};
+
+export function createClient(config?: SupabaseBrowserConfig) {
+  const url = config?.url ?? getSupabaseUrl();
+  const anonKey = config?.anonKey ?? getSupabaseAnonKey();
+  return createBrowserClient(url, anonKey);
 }

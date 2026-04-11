@@ -1,0 +1,5 @@
+export { LandingFaqSection } from './landing-faq-section'
+export { LandingFeaturesComparisonSection } from './landing-features-comparison-section'
+export { LandingHeroSection } from './landing-hero-section'
+export { LandingHowItWorksSection } from './landing-how-it-works-section'
+export { LandingTryUrlSection } from './landing-try-url-section'

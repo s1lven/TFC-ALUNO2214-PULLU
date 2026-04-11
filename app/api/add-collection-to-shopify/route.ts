@@ -1,6 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { jsonError, jsonSuccess } from '@/lib/api/http';
+import { devLog } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/shopify/store-access';
+import { checkRateLimit } from '@/lib/rate-limit';
 import {
   matchCreatedVariantsToOriginals,
   resolveVariantSourceImageId,
@@ -33,7 +36,7 @@ async function shopifyGraphQL(shopifyStoreUrl: string, shopifyToken: string, que
 
 // Helper function to create collection only using GraphQL
 async function createCollectionOnly(collectionData: { title: string; handle?: string; description?: string; [key: string]: unknown }, shopifyStoreUrl: string, shopifyToken: string) {
-  console.log('Creating collection in Shopify:', collectionData.title);
+  devLog('Creating collection in Shopify:', collectionData.title);
 
   const mutation = `
     mutation collectionCreate($input: CollectionInput!) {
@@ -68,13 +71,12 @@ async function createCollectionOnly(collectionData: { title: string; handle?: st
   }
 
   const collection = data.collectionCreate.collection;
-  return NextResponse.json({
-    success: true,
+  return jsonSuccess({
     collection: {
       id: collection.legacyResourceId,
       title: collection.title,
       handle: collection.handle,
-      gid: collection.id
+      gid: collection.id,
     },
   });
 }
@@ -164,11 +166,7 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
 
     if (!shopifyResponse || !shopifyResponse.ok) {
       const errorText = await shopifyResponse?.text();
-      console.error('Shopify API error:', errorText);
-      return NextResponse.json(
-        { success: false, error: `Shopify API error: ${errorText}` },
-        { status: shopifyResponse?.status ?? 500 }
-      );
+      return jsonError(`Shopify API error: ${errorText}`, shopifyResponse?.status ?? 500);
     }
 
     const result = await shopifyResponse.json();
@@ -270,12 +268,14 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
               continue;
             }
             if (!putResponse.ok) {
-              const errText = await putResponse.text();
-              console.error(`Image ${imgId} variant assignment failed:`, errText);
+              await putResponse.text();
             }
             break;
-          } catch (error) {
-            console.error(`Failed to assign variants to image ${imgId}:`, error);
+          } catch (err) {
+            devLog(
+              'Product image variant_ids update failed:',
+              err instanceof Error ? err.message : err,
+            );
             break;
           }
         }
@@ -307,23 +307,16 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
           productIds: [productGid]
         });
       } catch (error) {
-        console.error('Error adding product to collection:', error);
+        devLog(
+          'collectionAddProducts failed:',
+          error instanceof Error ? error.message : error,
+        );
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      product: {
-        id: createdProduct.id,
-        title: createdProduct.title
-      },
-    });
+    return jsonSuccess({ product: { id: createdProduct.id, title: createdProduct.title } });
   } catch (error) {
-    console.error('Error adding product to Shopify:', error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to add product' },
-      { status: 500 }
-    );
+    return jsonError(error instanceof Error ? error.message : 'Failed to add product', 500);
   }
 }
 
@@ -332,72 +325,36 @@ export async function POST(request: NextRequest) {
     const requestData = await request.json();
     const { storeId } = requestData;
 
-    if (!storeId) {
-      return NextResponse.json({ error: 'Store ID is required' }, { status: 400 });
-    }
+    if (!storeId) return jsonError('Store ID is required', 400);
 
     const supabase = await createClient();
-    
-    // Get the current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
 
-    // Fetch store credentials
+    if (userError || !user) return jsonError('Unauthorized', 401);
+    if (!checkRateLimit(`add-collection-to-shopify:${user.id}`, 300)) return jsonError('Too many requests. Please slow down.', 429);
+
     const { data: store, error: storeError } = await supabase
       .from('shopify_stores')
-      .select('*')
+      .select('id, user_id, shopify_store_url, shopify_token, connection_status')
       .eq('id', storeId)
       .eq('user_id', user.id)
       .single();
 
-    if (storeError || !store) {
-      return NextResponse.json(
-        { error: 'Store not found' },
-        { status: 404 }
-      );
-    }
+    if (storeError || !store) return jsonError('Store not found', 404);
 
     const accessToken = getShopifyAccessTokenForApi(store);
-    if (!accessToken) {
-      return NextResponse.json({ error: STORE_NOT_CONNECTED_MESSAGE }, { status: 400 });
-    }
+    if (!accessToken) return jsonError(STORE_NOT_CONNECTED_MESSAGE, 400);
 
-    // Handle product-only import (for progress tracking)
     if (requestData.productOnly) {
-      return await importSingleProduct(
-        requestData.product, 
-        requestData.collectionId, 
-        store.shopify_store_url, 
-        accessToken
-      );
+      return await importSingleProduct(requestData.product, requestData.collectionId, store.shopify_store_url, accessToken);
     }
 
-    // Handle collection-only creation (for progress tracking)
     if (requestData.collectionOnly) {
-      return await createCollectionOnly(
-        requestData, 
-        store.shopify_store_url, 
-        accessToken
-      );
+      return await createCollectionOnly(requestData, store.shopify_store_url, accessToken);
     }
 
-    // Handle full collection import (legacy - not used anymore)
-    return NextResponse.json({ error: 'Use batch import instead' }, { status: 400 });
-
+    return jsonError('Use batch import instead', 400);
   } catch (error) {
-    console.error('Collection import error:', error);
-    return NextResponse.json(
-      { 
-        success: false,
-        error: `Failed to import collection: ${error instanceof Error ? error.message : 'Unknown error'}` 
-      },
-      { status: 500 }
-    );
+    return jsonError(`Failed to import collection: ${error instanceof Error ? error.message : 'Unknown error'}`, 500);
   }
 }

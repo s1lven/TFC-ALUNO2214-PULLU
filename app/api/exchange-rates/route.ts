@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { FRANKFURTER_CURRENCIES } from '@/lib/pricing/adjust-collection-prices';
+import { jsonError, jsonOk } from '@/lib/api/http';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const ALLOWED = new Set(FRANKFURTER_CURRENCIES.map((c) => c.code));
 
@@ -11,20 +13,19 @@ export async function POST(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    if (!user) return jsonError('Unauthorized', 401);
+    if (!checkRateLimit(`exchange-rates:${user.id}`, 60)) return jsonError('Too many requests. Please slow down.', 429);
 
     const body = await request.json().catch(() => ({}));
     const from = typeof body.from === 'string' ? body.from.toUpperCase().trim() : '';
     const to = typeof body.to === 'string' ? body.to.toUpperCase().trim() : '';
 
     if (!from || !to || !ALLOWED.has(from) || !ALLOWED.has(to)) {
-      return NextResponse.json({ error: 'Invalid or unsupported currency' }, { status: 400 });
+      return jsonError('Invalid or unsupported currency', 400);
     }
 
     if (from === to) {
-      return NextResponse.json({ from, to, rate: 1, date: new Date().toISOString().slice(0, 10) });
+      return jsonOk({ from, to, rate: 1, date: new Date().toISOString().slice(0, 10) });
     }
 
     const url = `https://api.frankfurter.app/latest?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
@@ -35,29 +36,17 @@ export async function POST(request: NextRequest) {
 
     if (!res.ok) {
       const text = await res.text();
-      return NextResponse.json(
-        { error: `Exchange rate service error: ${res.status}`, detail: text.slice(0, 200) },
-        { status: 502 },
-      );
+      return jsonError(`Exchange rate service error: ${res.status} — ${text.slice(0, 200)}`, 502);
     }
 
     const data = (await res.json()) as { rates?: Record<string, number>; date?: string };
     const rate = data.rates?.[to];
     if (typeof rate !== 'number' || !Number.isFinite(rate) || rate <= 0) {
-      return NextResponse.json({ error: 'Rate not available for this pair' }, { status: 502 });
+      return jsonError('Rate not available for this pair', 502);
     }
 
-    return NextResponse.json({
-      from,
-      to,
-      rate,
-      date: data.date ?? null,
-    });
+    return jsonOk({ from, to, rate, date: data.date ?? null });
   } catch (e) {
-    console.error('exchange-rates:', e);
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to fetch exchange rate' },
-      { status: 500 },
-    );
+    return jsonError(e instanceof Error ? e.message : 'Failed to fetch exchange rate', 500);
   }
 }

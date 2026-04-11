@@ -106,3 +106,34 @@
 .hover\:scrollbar-thumb-gray-400:hover {
   scrollbar-color: #9ca3af transparent;
 }
+
+/* NotificationBanner — light-only: black bar, white text; icon colors set in component */
+@keyframes notification-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notification-banner-surface {
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: min(100vw - 32px, 22rem);
+  margin-left: auto;
+  margin-right: auto;
+  background: #000000;
+  color: #ffffff;
+  animation: notification-banner-in 200ms ease-out;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 12px;
+  border-radius: 8px;
+  padding: 12px 16px;
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 0.1),
+    0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
