@@ -46,20 +46,20 @@ export function DashboardOnboardingEmptyStore({
           </div>
           <div className="space-y-5 mb-6">
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-2.5 block text-left">Store</label>
+              <label className="text-sm font-medium text-gray-700 mb-2.5 block text-left">Store Name</label>
               <Input
-                value={newStoreSubdomain}
-                onChange={(e) => onSubdomainChange(e.target.value)}
-                placeholder="your-store"
+                value={newStoreAlias}
+                onChange={(e) => onAliasChange(e.target.value)}
+                placeholder="My Store"
                 className="bg-white border-gray-300 text-gray-900 h-12 text-base"
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-2.5 block text-left">Alias</label>
+              <label className="text-sm font-medium text-gray-700 mb-2.5 block text-left">Store URL</label>
               <Input
-                value={newStoreAlias}
-                onChange={(e) => onAliasChange(e.target.value)}
-                placeholder="How you want this store labeled here"
+                value={newStoreSubdomain}
+                onChange={(e) => onSubdomainChange(e.target.value)}
+                placeholder="your-store.myshopify.com"
                 className="bg-white border-gray-300 text-gray-900 h-12 text-base"
               />
             </div>

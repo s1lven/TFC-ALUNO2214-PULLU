@@ -25,4 +25,3 @@ export async function GET() {
     return jsonError('Failed to fetch stores', 500);
   }
 }
-

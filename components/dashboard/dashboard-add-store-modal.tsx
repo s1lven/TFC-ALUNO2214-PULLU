@@ -55,20 +55,20 @@ export function DashboardAddStoreModal({
         </p>
         <div className="space-y-5">
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-2 block">Store</label>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Store Name</label>
             <Input
-              value={newStoreSubdomain}
-              onChange={(e) => onSubdomainChange(e.target.value)}
-              placeholder="your-store"
+              value={newStoreAlias}
+              onChange={(e) => onAliasChange(e.target.value)}
+              placeholder="My Store"
               className="bg-white border-gray-300 text-gray-900 h-11"
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-2 block">Alias</label>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Store URL</label>
             <Input
-              value={newStoreAlias}
-              onChange={(e) => onAliasChange(e.target.value)}
-              placeholder="Label in Pullu"
+              value={newStoreSubdomain}
+              onChange={(e) => onSubdomainChange(e.target.value)}
+              placeholder="your-store.myshopify.com"
               className="bg-white border-gray-300 text-gray-900 h-11"
             />
           </div>
