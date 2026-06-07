@@ -4,6 +4,7 @@ import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/
 import { jsonError, jsonOk } from '@/lib/api/http';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { devLog } from '@/lib/logger';
+import { logImport } from '@/lib/import-logger';
 import {
   buildScrapedToCreatedImageIdMap,
   matchCreatedVariantsToOriginals,
@@ -13,7 +14,7 @@ import {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, handle, body_html, vendor, images, options, variants, taxable, trackQuantity, collectionIds, storeId, status, published } = body;
+    const { title, handle, body_html, vendor, images, options, variants, taxable, trackQuantity, collectionIds, storeId, status, published, seoTitle, seoDescription, sourceUrl } = body;
 
     if (!storeId) return jsonError('Store ID is required', 400);
 
@@ -46,6 +47,8 @@ export async function POST(request: NextRequest) {
         status: status || 'active',
         published: published !== undefined ? published : true,
         published_scope: published ? 'web' : null,
+        ...(seoTitle && { metafields_global_title_tag: seoTitle }),
+        ...(seoDescription && { metafields_global_description_tag: seoDescription }),
         images: images.map((img: { src: string; alt?: string }) => ({
           src: img.src,
           alt: img.alt || title,
@@ -122,6 +125,7 @@ export async function POST(request: NextRequest) {
 
     if (!shopifyResponse.ok) {
       const errorText = await shopifyResponse.text();
+      logImport({ storeId, type: 'product', status: 'error', sourceUrl, payload: { title }, error: errorText });
       return jsonError(`Shopify API error: ${errorText}`, shopifyResponse.status);
     }
 
@@ -217,6 +221,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    logImport({
+      storeId,
+      type: 'product',
+      status: 'success',
+      sourceUrl,
+      payload: { title, shopify_product_id: result.product?.id, variant_count: result.product?.variants?.length ?? 0 },
+    });
     return jsonOk({ product: result.product });
   } catch (error) {
     return jsonError('Failed to add product to Shopify store', 500);

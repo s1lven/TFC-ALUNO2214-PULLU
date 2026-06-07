@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { jsonError, jsonOk } from '@/lib/api/http';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { encrypt } from '@/lib/crypto';
 import {
   buildAuthorizeUrl,
   generateOAuthNonce,
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
         store_alias: storeAlias,
         store_name: storeAlias,
         shopify_client_id: clientId,
-        shopify_client_secret: clientSecret,
+        shopify_client_secret: encrypt(clientSecret),
         connection_status: 'pending_oauth',
         oauth_nonce: nonce,
         shopify_token: null,

@@ -30,7 +30,7 @@ function makeDeleteChain(result: { error: unknown }) {
   };
 }
 
-function makeAdminForGet(row: { key_last_four: string } | null, error: unknown = null) {
+function makeAdminForGet(row: { openai_key_last_four: string } | null, error: unknown = null) {
   return {
     from: vi.fn().mockReturnValue({
       select: vi.fn().mockReturnThis(),
@@ -90,7 +90,7 @@ describe("GET /api/user/openai-key", () => {
   it("returns configured=true with lastFour when key exists", async () => {
     mockCreateClient.mockResolvedValue(makeSupabase(MOCK_USER) as never);
     mockCreateServiceClient.mockReturnValue(
-      makeAdminForGet({ key_last_four: "X4f9" }) as never,
+      makeAdminForGet({ openai_key_last_four: "X4f9" }) as never,
     );
 
     const res = await GET();

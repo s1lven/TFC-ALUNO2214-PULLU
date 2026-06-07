@@ -7,6 +7,7 @@ import {
 } from '@/lib/shopify/oauth';
 import { resolvePublicAppBaseUrl } from '@/lib/shopify/public-app-url';
 import { devLog } from '@/lib/logger';
+import { decrypt, encrypt } from '@/lib/crypto';
 
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
@@ -95,7 +96,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const clientSecret = store.shopify_client_secret as string;
+    const clientSecret = decrypt(store.shopify_client_secret as string);
     if (!verifyOAuthHmac(searchParams, clientSecret)) {
       return redirectDashboard({
         shopify_error: 'invalid_hmac',
@@ -137,7 +138,7 @@ export async function GET(request: NextRequest) {
     const { error: updateError } = await supabase
       .from('shopify_stores')
       .update({
-        shopify_token: accessToken,
+        shopify_token: encrypt(accessToken),
         connection_status: 'connected',
         oauth_nonce: null,
         store_name: shopName || undefined,

@@ -8,7 +8,7 @@ import RichTextEditor from '@/components/dashboard/rich-text-editor';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { HugeiconsIcon } from '@hugeicons/react';
-import { DownloadFreeIcons, PlusSignFreeIcons, SparklesFreeIcons, DeleteFreeIcons, CancelFreeIcons } from '@hugeicons/core-free-icons';
+import { DownloadFreeIcons, PlusSignFreeIcons, SparklesFreeIcons, DeleteFreeIcons, CancelFreeIcons, ArrowExpandDiagonal01FreeIcons } from '@hugeicons/core-free-icons';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { LANGUAGES } from '@/lib/dashboard/languages';
 
@@ -95,9 +95,61 @@ export default function ProductImport({
   const [editableImages, setEditableImages] = React.useState<Array<{ src: string; [key: string]: unknown }>>([]);
   const [uploadingImages, setUploadingImages] = React.useState(false);
   const [draggedIndex, setDraggedIndex] = React.useState<number | null>(null);
+  const didDragRef = React.useRef(false);
   const [isActive, setIsActive] = React.useState(true);
   const [isPublished, setIsPublished] = React.useState(true);
-  const [editableVendor, setEditableVendor] = React.useState('Imported');
+  const [lightboxIndex, setLightboxIndex] = React.useState<number | null>(null);
+  const [lightboxEditName, setLightboxEditName] = React.useState('');
+  const [lightboxEditAlt, setLightboxEditAlt] = React.useState('');
+  const [showSkuPanel, setShowSkuPanel] = React.useState(false);
+
+  const getImageFilename = (src: string): string => {
+    try {
+      const path = new URL(src).pathname;
+      return path.split('/').pop()?.split('?')[0] || 'image';
+    } catch {
+      return src.split('/').pop()?.split('?')[0] || 'image';
+    }
+  };
+
+  React.useEffect(() => {
+    if (lightboxIndex !== null && editableImages[lightboxIndex]) {
+      const img = editableImages[lightboxIndex];
+      setLightboxEditName((img.name as string) || getImageFilename(img.src));
+      setLightboxEditAlt((img.alt as string) || '');
+    }
+  }, [lightboxIndex]);
+
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxIndex(null);
+      if (e.key === 'ArrowRight' && lightboxIndex !== null) setLightboxIndex(i => i !== null && i < editableImages.length - 1 ? i + 1 : i);
+      if (e.key === 'ArrowLeft' && lightboxIndex !== null) setLightboxIndex(i => i !== null && i > 0 ? i - 1 : i);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxIndex, editableImages.length]);
+
+  const saveLightboxImageInfo = () => {
+    if (lightboxIndex === null) return;
+    const updated = [...editableImages];
+    updated[lightboxIndex] = { ...updated[lightboxIndex], name: lightboxEditName, alt: lightboxEditAlt };
+    setEditableImages(updated);
+  };
+
+  const downloadLightboxImage = async () => {
+    if (lightboxIndex === null) return;
+    const img = editableImages[lightboxIndex];
+    try {
+      const blob = await convertImageToPNG(img.src);
+      saveAs(blob, `${lightboxEditName || getImageFilename(img.src)}.png`);
+    } catch {
+      console.error('Failed to download image');
+    }
+  };
+  const [editableVendor] = React.useState('');
+  const [editableSeoTitle, setEditableSeoTitle] = React.useState('');
+  const [editableSeoDescription, setEditableSeoDescription] = React.useState('');
 
   // Initialize editable images when productData changes
   React.useEffect(() => {
@@ -109,7 +161,8 @@ export default function ProductImport({
   // Reset vendor to "Imported" when productData changes
   React.useEffect(() => {
     if (productData) {
-      setEditableVendor('Imported');
+      setEditableSeoTitle((productData.metafields_global_title_tag as string) || '');
+      setEditableSeoDescription((productData.metafields_global_description_tag as string) || '');
     }
   }, [productData]);
 
@@ -154,6 +207,7 @@ export default function ProductImport({
 
   // Handle drag and drop for reordering
   const handleDragStart = (index: number) => {
+    didDragRef.current = false;
     setDraggedIndex(index);
   };
 
@@ -174,7 +228,9 @@ export default function ProductImport({
   };
 
   const handleDragEnd = () => {
+    didDragRef.current = true;
     setDraggedIndex(null);
+    setTimeout(() => { didDragRef.current = false; }, 100);
   };
 
   // Calculate discount when prices change
@@ -354,6 +410,8 @@ export default function ProductImport({
           storeId: selectedStore.id,
           status: isActive ? 'active' : 'draft',
           published: isPublished,
+          seoTitle: editableSeoTitle,
+          seoDescription: editableSeoDescription,
         }),
       });
 
@@ -502,6 +560,113 @@ export default function ProductImport({
   };
 
   return (
+    <>
+    {lightboxIndex !== null && editableImages[lightboxIndex] && (() => {
+      const img = editableImages[lightboxIndex];
+      const ext = getImageFilename(img.src).split('.').pop()?.toUpperCase() || 'IMG';
+      const w = img.width as number | undefined;
+      const h = img.height as number | undefined;
+      const createdAt = img.created_at as string | undefined;
+      const detailParts = [ext, w && h ? `${w} × ${h}` : null].filter(Boolean).join(' • ');
+      return (
+        <div className="fixed inset-0 z-50 bg-black/80" onClick={() => setLightboxIndex(null)}>
+          {/* Image + adjacent arrows */}
+          <div className="absolute inset-0 flex items-center justify-center p-8 pr-[308px]">
+            <div className="relative inline-flex max-h-full max-w-full" onClick={(e) => e.stopPropagation()}>
+              {lightboxIndex > 0 && (
+                <button
+                  onClick={() => setLightboxIndex(lightboxIndex - 1)}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-[calc(100%+12px)] z-10 bg-[#2a2a2a] hover:bg-[#3a3a3a] rounded-lg px-3 py-2.5 transition-colors"
+                >
+                  <svg width="8" height="14" viewBox="0 0 8 14" fill="none"><path d="M7 1L1 7l6 6" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              )}
+              <img
+                src={img.src}
+                alt={lightboxEditAlt || 'Full size preview'}
+                className="max-h-full max-w-full object-contain rounded-lg block"
+              />
+              {lightboxIndex < editableImages.length - 1 && (
+                <button
+                  onClick={() => setLightboxIndex(lightboxIndex + 1)}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-[calc(100%+12px)] z-10 bg-[#2a2a2a] hover:bg-[#3a3a3a] rounded-lg px-3 py-2.5 transition-colors"
+                >
+                  <svg width="8" height="14" viewBox="0 0 8 14" fill="none"><path d="M1 1l6 6-6 6" stroke="white" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Floating info panel */}
+          <div className="absolute right-4 top-4 w-[280px] z-10 bg-[#232323] rounded-xl shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
+              <p className="text-xs text-white/40 font-medium">{lightboxIndex + 1} / {editableImages.length}</p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={downloadLightboxImage}
+                  className="bg-white/10 hover:bg-white/20 rounded-md p-1.5 transition-colors"
+                  title="Download"
+                >
+                  <HugeiconsIcon icon={DownloadFreeIcons} size={14} className="text-white" />
+                </button>
+                <button
+                  onClick={() => setLightboxIndex(null)}
+                  className="bg-white/10 hover:bg-white/20 rounded-md p-1.5 transition-colors"
+                  title="Close"
+                >
+                  <HugeiconsIcon icon={CancelFreeIcons} size={14} className="text-white" />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
+              <p className="text-xs font-semibold text-white/40 uppercase tracking-wide">Information</p>
+
+              <div className="space-y-1">
+                <label className="text-xs text-white/50">Name <span className="text-white/25">(local only)</span></label>
+                <input
+                  value={lightboxEditName}
+                  onChange={(e) => {
+                    setLightboxEditName(e.target.value);
+                    const updated = [...editableImages];
+                    updated[lightboxIndex] = { ...updated[lightboxIndex], name: e.target.value };
+                    setEditableImages(updated);
+                  }}
+                  className="w-full bg-white/10 border border-white/15 rounded-md px-3 py-1.5 text-xs text-white placeholder-white/30 outline-none focus:border-white/40 transition-colors"
+                  placeholder="Image name"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-white/50">Alt text</label>
+                <input
+                  value={lightboxEditAlt}
+                  onChange={(e) => {
+                    setLightboxEditAlt(e.target.value);
+                    const updated = [...editableImages];
+                    updated[lightboxIndex] = { ...updated[lightboxIndex], alt: e.target.value };
+                    setEditableImages(updated);
+                  }}
+                  className="w-full bg-white/10 border border-white/15 rounded-md px-3 py-1.5 text-xs text-white placeholder-white/30 outline-none focus:border-white/40 transition-colors"
+                  placeholder="Describe this image"
+                />
+              </div>
+
+              {(detailParts || createdAt) && (
+                <div className="space-y-1">
+                  <p className="text-xs text-white/50">Details</p>
+                  {detailParts && <p className="text-xs text-white/70">{detailParts}</p>}
+                  {createdAt && (
+                    <p className="text-xs text-white/70">
+                      Added {new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    })()}
     <div className="h-full w-full flex items-center justify-center p-6">
       <div className="bg-white rounded-xl w-full max-w-6xl flex flex-col shadow-lg border border-gray-200" style={{ maxHeight: 'calc(100vh - 140px)' }}>
         {/* Header with Translation */}
@@ -597,25 +762,43 @@ export default function ProductImport({
                   />
                 </div>
 
-                {/* Product Handle */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Product handle</label>
-                  <Input
-                    value={editableHandle}
-                    onChange={(e) => setEditableHandle(e.target.value)}
-                    className="bg-white border-gray-300 text-gray-900 h-10"
-                    placeholder="product-handle"
-                  />
+                {/* Handle + Page title side by side */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Handle</label>
+                    <Input
+                      value={editableHandle}
+                      onChange={(e) => setEditableHandle(e.target.value)}
+                      className="bg-white border-gray-300 text-gray-900 h-10"
+                      placeholder="product-handle"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-sm font-medium text-gray-700">Page title</label>
+                      <span className={`text-xs ${editableSeoTitle.length > 70 ? 'text-red-500' : 'text-gray-400'}`}>{editableSeoTitle.length} / 70</span>
+                    </div>
+                    <Input
+                      value={editableSeoTitle}
+                      onChange={(e) => setEditableSeoTitle(e.target.value)}
+                      className="bg-white border-gray-300 text-gray-900 h-10"
+                      placeholder="Page title"
+                    />
+                  </div>
                 </div>
 
-                {/* Product Vendor */}
+                {/* Meta description */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Vendor</label>
-                  <Input
-                    value={editableVendor}
-                    onChange={(e) => setEditableVendor(e.target.value)}
-                    className="bg-white border-gray-300 text-gray-900 h-10"
-                    placeholder="Vendor name"
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-medium text-gray-700">Meta description</label>
+                    <span className={`text-xs ${editableSeoDescription.length > 160 ? 'text-red-500' : 'text-gray-400'}`}>{editableSeoDescription.length} / 160</span>
+                  </div>
+                  <textarea
+                    value={editableSeoDescription}
+                    onChange={(e) => setEditableSeoDescription(e.target.value)}
+                    rows={2}
+                    className="w-full bg-white border border-gray-300 text-gray-900 rounded-md px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-gray-300 focus:border-transparent"
+                    placeholder="Meta description"
                   />
                 </div>
 
@@ -729,7 +912,7 @@ export default function ProductImport({
                   <div className="grid grid-cols-3 gap-3 max-h-[350px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 hover:scrollbar-thumb-gray-400">
                     {editableImages.map((image: { src: string; [key: string]: unknown }, index: number) => (
                       <div
-                        key={image.id as string} 
+                        key={image.id as string}
                         className={`aspect-square rounded-lg border-2 overflow-hidden relative group cursor-pointer ${
                           draggedIndex === index ? 'border-green-500 opacity-50' : 'border-gray-200'
                         }`}
@@ -737,6 +920,7 @@ export default function ProductImport({
                         onDragStart={() => handleDragStart(index)}
                         onDragOver={(e) => handleDragOver(e, index)}
                         onDragEnd={handleDragEnd}
+                        onClick={() => { if (!didDragRef.current) setLightboxIndex(index); }}
                       >
                         <img
                           src={image.src}
@@ -760,6 +944,13 @@ export default function ProductImport({
                               title="Download image"
                             >
                               <HugeiconsIcon icon={DownloadFreeIcons} size={14} className="text-white" />
+                            </button>
+                            <button
+                              onClick={() => setLightboxIndex(index)}
+                              className="bg-black/60 hover:bg-black/80 rounded-md p-1.5 transition-colors"
+                              title="View image"
+                            >
+                              <HugeiconsIcon icon={ArrowExpandDiagonal01FreeIcons} size={14} className="text-white" />
                             </button>
                             <button
                               onClick={() => {
@@ -797,21 +988,30 @@ export default function ProductImport({
             <div>
               <div className="flex items-center justify-between mb-3">
                 <label className="text-sm font-medium text-gray-700">Product variants ({editableVariants.length})</label>
-                <Button
-                  onClick={() => {
-                    const newOption = {
-                      name: `Option ${editableOptions.length + 1}`,
-                      values: ['Value 1'],
-                      position: editableOptions.length + 1
-                    };
-                    setEditableOptions([...editableOptions, newOption]);
-                  }}
-                  size="sm"
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 h-8 px-3 text-xs shadow-none"
-                >
-                  <HugeiconsIcon icon={PlusSignFreeIcons} size={14} className="mr-1" />
-                  Add Variant
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => setShowSkuPanel(!showSkuPanel)}
+                    size="sm"
+                    className={`border h-8 px-3 text-xs shadow-none transition-colors ${showSkuPanel ? 'bg-gray-300 text-gray-900 border-gray-400 hover:bg-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300'}`}
+                  >
+                    SKUs / GTINs
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const newOption = {
+                        name: `Option ${editableOptions.length + 1}`,
+                        values: ['Value 1'],
+                        position: editableOptions.length + 1
+                      };
+                      setEditableOptions([...editableOptions, newOption]);
+                    }}
+                    size="sm"
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 h-8 px-3 text-xs shadow-none"
+                  >
+                    <HugeiconsIcon icon={PlusSignFreeIcons} size={14} className="mr-1" />
+                    Add Variant
+                  </Button>
+                </div>
               </div>
 
               {/* Variant Options */}
@@ -887,6 +1087,46 @@ export default function ProductImport({
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* SKU / GTIN panel */}
+              {showSkuPanel && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden mt-1">
+                  <div className="grid grid-cols-[1fr_1fr_1fr] bg-gray-100 border-b border-gray-200 px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    <span>Variant</span>
+                    <span>SKU</span>
+                    <span>GTIN / Barcode</span>
+                  </div>
+                  {editableVariants.map((variant, index) => {
+                    const parts = [variant.option1, variant.option2, variant.option3].filter(Boolean) as string[];
+                    const label = parts.length > 0 ? parts.join(' / ') : 'Default';
+                    return (
+                      <div key={index} className="grid grid-cols-[1fr_1fr_1fr] px-3 py-2 border-b border-gray-100 last:border-0 items-center gap-3">
+                        <span className="text-xs text-gray-600 truncate">{label}</span>
+                        <Input
+                          value={(variant.sku as string) || ''}
+                          onChange={(e) => {
+                            const updated = [...editableVariants];
+                            updated[index] = { ...updated[index], sku: e.target.value };
+                            setEditableVariants(updated);
+                          }}
+                          className="h-7 text-xs bg-white border-gray-300"
+                          placeholder="SKU-001"
+                        />
+                        <Input
+                          value={(variant.barcode as string) || ''}
+                          onChange={(e) => {
+                            const updated = [...editableVariants];
+                            updated[index] = { ...updated[index], barcode: e.target.value };
+                            setEditableVariants(updated);
+                          }}
+                          className="h-7 text-xs bg-white border-gray-300"
+                          placeholder="0000000000000"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1018,5 +1258,6 @@ export default function ProductImport({
         </div>
       </div>
     </div>
+    </>
   );
 }

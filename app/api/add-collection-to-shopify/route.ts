@@ -4,6 +4,7 @@ import { devLog } from '@/lib/logger';
 import { createClient } from '@/lib/supabase/server';
 import { getShopifyAccessTokenForApi, STORE_NOT_CONNECTED_MESSAGE } from '@/lib/shopify/store-access';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { logImport } from '@/lib/import-logger';
 import {
   matchCreatedVariantsToOriginals,
   resolveVariantSourceImageId,
@@ -35,7 +36,7 @@ async function shopifyGraphQL(shopifyStoreUrl: string, shopifyToken: string, que
 }
 
 // Helper function to create collection only using GraphQL
-async function createCollectionOnly(collectionData: { title: string; handle?: string; description?: string; [key: string]: unknown }, shopifyStoreUrl: string, shopifyToken: string) {
+async function createCollectionOnly(collectionData: { title: string; handle?: string; description?: string; sourceUrl?: string; [key: string]: unknown }, shopifyStoreUrl: string, shopifyToken: string, storeId: number) {
   devLog('Creating collection in Shopify:', collectionData.title);
 
   const mutation = `
@@ -71,6 +72,13 @@ async function createCollectionOnly(collectionData: { title: string; handle?: st
   }
 
   const collection = data.collectionCreate.collection;
+  logImport({
+    storeId,
+    type: 'collection',
+    status: 'success',
+    sourceUrl: collectionData.sourceUrl ?? null,
+    payload: { title: collection.title, shopify_collection_id: collection.legacyResourceId },
+  });
   return jsonSuccess({
     collection: {
       id: collection.legacyResourceId,
@@ -82,7 +90,7 @@ async function createCollectionOnly(collectionData: { title: string; handle?: st
 }
 
 // Helper function to import single product using REST API (simpler for products with variants)
-async function importSingleProduct(product: { title: string; handle?: string; body_html?: string; images?: Array<{ src: string; alt?: string }>; options?: Array<{ name: string; values: string[] }>; variants?: Array<{ price: string; compare_at_price?: string; sku?: string; barcode?: string; inventory_quantity?: number; featured_image?: { id: string }; image_id?: string; [key: string]: unknown }>; [key: string]: unknown }, collectionGid: string, shopifyStoreUrl: string, shopifyToken: string) {
+async function importSingleProduct(product: { title: string; handle?: string; body_html?: string; sourceUrl?: string; images?: Array<{ src: string; alt?: string }>; options?: Array<{ name: string; values: string[] }>; variants?: Array<{ price: string; compare_at_price?: string; sku?: string; barcode?: string; inventory_quantity?: number; featured_image?: { id: string }; image_id?: string; [key: string]: unknown }>; [key: string]: unknown }, collectionGid: string, shopifyStoreUrl: string, shopifyToken: string, storeId: number) {
   try {
     const { title, handle, body_html, images, options, variants } = product;
 
@@ -166,6 +174,7 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
 
     if (!shopifyResponse || !shopifyResponse.ok) {
       const errorText = await shopifyResponse?.text();
+      logImport({ storeId, type: 'product', status: 'error', sourceUrl: product.sourceUrl, payload: { title: product.title }, error: errorText });
       return jsonError(`Shopify API error: ${errorText}`, shopifyResponse?.status ?? 500);
     }
 
@@ -314,6 +323,13 @@ async function importSingleProduct(product: { title: string; handle?: string; bo
       }
     }
 
+    logImport({
+      storeId,
+      type: 'product',
+      status: 'success',
+      sourceUrl: product.sourceUrl,
+      payload: { title: createdProduct.title, shopify_product_id: createdProduct.id, variant_count: createdProduct.variants?.length ?? 0 },
+    });
     return jsonSuccess({ product: { id: createdProduct.id, title: createdProduct.title } });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : 'Failed to add product', 500);
@@ -346,11 +362,11 @@ export async function POST(request: NextRequest) {
     if (!accessToken) return jsonError(STORE_NOT_CONNECTED_MESSAGE, 400);
 
     if (requestData.productOnly) {
-      return await importSingleProduct(requestData.product, requestData.collectionId, store.shopify_store_url, accessToken);
+      return await importSingleProduct(requestData.product, requestData.collectionId, store.shopify_store_url, accessToken, store.id);
     }
 
     if (requestData.collectionOnly) {
-      return await createCollectionOnly(requestData, store.shopify_store_url, accessToken);
+      return await createCollectionOnly(requestData, store.shopify_store_url, accessToken, store.id);
     }
 
     return jsonError('Use batch import instead', 400);

@@ -1,15 +1,17 @@
-/**
- * Resolves the Admin API access token for Shopify calls, or null if the store
- * has not finished OAuth or has no token.
- */
+import { decrypt } from '@/lib/crypto';
+
 export function getShopifyAccessTokenForApi(store: {
   shopify_token?: string | null;
   connection_status?: string | null;
 }): string | null {
-  const token = typeof store.shopify_token === 'string' ? store.shopify_token.trim() : '';
-  if (!token) return null;
+  const raw = typeof store.shopify_token === 'string' ? store.shopify_token.trim() : '';
+  if (!raw) return null;
   if (store.connection_status === 'pending_oauth') return null;
-  return token;
+  try {
+    return decrypt(raw);
+  } catch {
+    return null;
+  }
 }
 
 export const STORE_NOT_CONNECTED_MESSAGE =

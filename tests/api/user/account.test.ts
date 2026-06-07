@@ -45,7 +45,7 @@ function makeAdminClient({
   return {
     from: vi
       .fn()
-      .mockReturnValueOnce(openaiChain)   // first call: user_openai_credentials
+      .mockReturnValueOnce(openaiChain)   // first call: user_ai_credentials
       .mockReturnValueOnce(storesChain),  // second call: shopify_stores
     auth: {
       admin: {
@@ -120,7 +120,7 @@ describe("DELETE /api/user/account", () => {
     await DELETE(makeRequest({ confirmation: "delete" }));
 
     const [firstCall, secondCall] = admin.from.mock.calls;
-    expect(firstCall[0]).toBe("user_openai_credentials");
+    expect(firstCall[0]).toBe("user_ai_credentials");
     expect(secondCall[0]).toBe("shopify_stores");
     expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith(MOCK_USER.id);
   });

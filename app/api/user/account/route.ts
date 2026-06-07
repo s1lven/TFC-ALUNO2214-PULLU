@@ -23,7 +23,7 @@ export async function DELETE(request: Request) {
     const admin = createServiceClient();
 
     const { error: openaiErr } = await admin
-      .from('user_openai_credentials')
+      .from('user_ai_credentials')
       .delete()
       .eq('user_id', user.id);
     if (openaiErr) {

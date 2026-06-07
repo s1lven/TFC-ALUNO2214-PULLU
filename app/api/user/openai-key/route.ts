@@ -2,6 +2,7 @@ import { jsonError, jsonOk, jsonSuccess } from '@/lib/api/http';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/admin';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { encrypt } from '@/lib/crypto';
 
 const MAX_KEY_LENGTH = 512;
 
@@ -23,8 +24,8 @@ export async function GET() {
 
     const admin = createServiceClient();
     const { data, error } = await admin
-      .from('user_openai_credentials')
-      .select('key_last_four')
+      .from('user_ai_credentials')
+      .select('openai_key_last_four')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -32,8 +33,8 @@ export async function GET() {
       return jsonError('Could not load API key status', 500);
     }
 
-    const configured = Boolean(data?.key_last_four);
-    return jsonOk({ configured, lastFour: configured ? data!.key_last_four : null });
+    const configured = Boolean(data?.openai_key_last_four);
+    return jsonOk({ configured, lastFour: configured ? data!.openai_key_last_four : null });
   } catch (e) {
     return jsonError('Server configuration error (service role or database).', 500);
   }
@@ -53,8 +54,8 @@ export async function POST(request: Request) {
 
     const lastFour = maskLastFour(apiKey);
     const admin = createServiceClient();
-    const { error } = await admin.from('user_openai_credentials').upsert(
-      { user_id: user.id, api_key: apiKey, key_last_four: lastFour, updated_at: new Date().toISOString() },
+    const { error } = await admin.from('user_ai_credentials').upsert(
+      { user_id: user.id, openai_api_key: encrypt(apiKey), openai_key_last_four: lastFour, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' },
     );
 
@@ -77,7 +78,7 @@ export async function DELETE() {
 
     const admin = createServiceClient();
     const { error } = await admin
-      .from('user_openai_credentials')
+      .from('user_ai_credentials')
       .delete()
       .eq('user_id', user.id);
 
