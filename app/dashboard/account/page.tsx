@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import { AccountOpenAiKeyCard, type KeyStatus } from '@/components/dashboard/account/account-openai-key-card';
+import { AccountFalKeyCard } from '@/components/dashboard/account/account-fal-key-card';
 import { AccountProfileCard } from '@/components/dashboard/account/account-profile-card';
 import { AccountDeleteAccountModal } from '@/components/dashboard/account/account-delete-account-modal';
 import { DashboardCenterSpinner } from '@/components/dashboard/dashboard-center-spinner';
@@ -15,12 +16,23 @@ export default function AccountPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
-  const [keyLoading, setKeyLoading] = useState(true);
-  const [newKey, setNewKey] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const [keyMessage, setKeyMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  // OpenAI key state
+  const [openaiKeyStatus, setOpenaiKeyStatus] = useState<KeyStatus | null>(null);
+  const [openaiKeyLoading, setOpenaiKeyLoading] = useState(true);
+  const [openaiNewKey, setOpenaiNewKey] = useState('');
+  const [openaiSaving, setOpenaiSaving] = useState(false);
+  const [openaiRemoving, setOpenaiRemoving] = useState(false);
+  const [openaiKeyMessage, setOpenaiKeyMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  // fal.ai key state
+  const [falKeyStatus, setFalKeyStatus] = useState<KeyStatus | null>(null);
+  const [falKeyLoading, setFalKeyLoading] = useState(true);
+  const [falNewKey, setFalNewKey] = useState('');
+  const [falSaving, setFalSaving] = useState(false);
+  const [falRemoving, setFalRemoving] = useState(false);
+  const [falKeyMessage, setFalKeyMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
   const supabase = createClient();
 
   const handleAccountDeleted = useCallback(async () => {
@@ -33,63 +45,72 @@ export default function AccountPage() {
 
   useEffect(() => {
     const fetchUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
       setLoading(false);
     };
-
     fetchUser();
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setKeyLoading(true);
+      setOpenaiKeyLoading(true);
       try {
         const res = await fetch('/api/user/openai-key');
         const data = await res.json().catch(() => null);
         if (!res.ok) {
           if (!cancelled) {
-            setKeyStatus(null);
-            setKeyMessage({
-              type: 'err',
-              text:
-                data?.error ||
-                'Could not load key status. Add SUPABASE_SERVICE_ROLE_KEY and run the latest migration.',
-            });
+            setOpenaiKeyStatus(null);
+            setOpenaiKeyMessage({ type: 'err', text: data?.error || 'Could not load key status.' });
           }
           return;
         }
         if (!cancelled) {
-          setKeyStatus({
-            configured: Boolean(data.configured),
-            lastFour: data.lastFour ?? null,
-          });
-          setKeyMessage(null);
+          setOpenaiKeyStatus({ configured: Boolean(data.configured), lastFour: data.lastFour ?? null });
+          setOpenaiKeyMessage(null);
         }
       } catch {
-        if (!cancelled) {
-          setKeyMessage({ type: 'err', text: 'Network error loading API key status.' });
-        }
+        if (!cancelled) setOpenaiKeyMessage({ type: 'err', text: 'Network error loading API key status.' });
       } finally {
-        if (!cancelled) setKeyLoading(false);
+        if (!cancelled) setOpenaiKeyLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  const saveKey = async () => {
-    setKeyMessage(null);
-    const trimmed = newKey.trim();
-    if (!trimmed) {
-      setKeyMessage({ type: 'err', text: 'Paste your OpenAI API key first.' });
-      return;
-    }
-    setSaving(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setFalKeyLoading(true);
+      try {
+        const res = await fetch('/api/user/fal-key');
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          if (!cancelled) {
+            setFalKeyStatus(null);
+            setFalKeyMessage({ type: 'err', text: data?.error || 'Could not load key status.' });
+          }
+          return;
+        }
+        if (!cancelled) {
+          setFalKeyStatus({ configured: Boolean(data.configured), lastFour: data.lastFour ?? null });
+          setFalKeyMessage(null);
+        }
+      } catch {
+        if (!cancelled) setFalKeyMessage({ type: 'err', text: 'Network error loading API key status.' });
+      } finally {
+        if (!cancelled) setFalKeyLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const saveOpenaiKey = async () => {
+    setOpenaiKeyMessage(null);
+    const trimmed = openaiNewKey.trim();
+    if (!trimmed) { setOpenaiKeyMessage({ type: 'err', text: 'Paste your OpenAI API key first.' }); return; }
+    setOpenaiSaving(true);
     try {
       const res = await fetch('/api/user/openai-key', {
         method: 'POST',
@@ -97,58 +118,82 @@ export default function AccountPage() {
         body: JSON.stringify({ apiKey: trimmed }),
       });
       const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setKeyMessage({
-          type: 'err',
-          text: data?.error || 'Could not save key.',
-        });
-        return;
-      }
-      setNewKey('');
-      setKeyStatus({
-        configured: true,
-        lastFour: data.lastFour ?? null,
-      });
-      setKeyMessage({ type: 'ok', text: 'Key saved. Only the last characters below are shown from now on.' });
+      if (!res.ok) { setOpenaiKeyMessage({ type: 'err', text: data?.error || 'Could not save key.' }); return; }
+      setOpenaiNewKey('');
+      setOpenaiKeyStatus({ configured: true, lastFour: data.lastFour ?? null });
+      setOpenaiKeyMessage({ type: 'ok', text: 'Key saved. Only the last characters below are shown from now on.' });
     } catch {
-      setKeyMessage({ type: 'err', text: 'Network error while saving.' });
+      setOpenaiKeyMessage({ type: 'err', text: 'Network error while saving.' });
     } finally {
-      setSaving(false);
+      setOpenaiSaving(false);
     }
   };
 
-  const removeKey = async () => {
-    setKeyMessage(null);
-    setRemoving(true);
+  const removeOpenaiKey = async () => {
+    setOpenaiKeyMessage(null);
+    setOpenaiRemoving(true);
     try {
       const res = await fetch('/api/user/openai-key', { method: 'DELETE' });
       const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setKeyMessage({
-          type: 'err',
-          text: data?.error || 'Could not remove key.',
-        });
-        return;
-      }
-      setKeyStatus({ configured: false, lastFour: null });
-      setKeyMessage({ type: 'ok', text: 'API key removed from your account.' });
+      if (!res.ok) { setOpenaiKeyMessage({ type: 'err', text: data?.error || 'Could not remove key.' }); return; }
+      setOpenaiKeyStatus({ configured: false, lastFour: null });
+      setOpenaiKeyMessage({ type: 'ok', text: 'API key removed from your account.' });
     } catch {
-      setKeyMessage({ type: 'err', text: 'Network error while removing.' });
+      setOpenaiKeyMessage({ type: 'err', text: 'Network error while removing.' });
     } finally {
-      setRemoving(false);
+      setOpenaiRemoving(false);
+    }
+  };
+
+  const saveFalKey = async () => {
+    setFalKeyMessage(null);
+    const trimmed = falNewKey.trim();
+    if (!trimmed) { setFalKeyMessage({ type: 'err', text: 'Paste your fal.ai API key first.' }); return; }
+    setFalSaving(true);
+    try {
+      const res = await fetch('/api/user/fal-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: trimmed }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { setFalKeyMessage({ type: 'err', text: data?.error || 'Could not save key.' }); return; }
+      setFalNewKey('');
+      setFalKeyStatus({ configured: true, lastFour: data.lastFour ?? null });
+      setFalKeyMessage({ type: 'ok', text: 'Key saved. Only the last characters below are shown from now on.' });
+    } catch {
+      setFalKeyMessage({ type: 'err', text: 'Network error while saving.' });
+    } finally {
+      setFalSaving(false);
+    }
+  };
+
+  const removeFalKey = async () => {
+    setFalKeyMessage(null);
+    setFalRemoving(true);
+    try {
+      const res = await fetch('/api/user/fal-key', { method: 'DELETE' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) { setFalKeyMessage({ type: 'err', text: data?.error || 'Could not remove key.' }); return; }
+      setFalKeyStatus({ configured: false, lastFour: null });
+      setFalKeyMessage({ type: 'ok', text: 'fal.ai API key removed from your account.' });
+    } catch {
+      setFalKeyMessage({ type: 'err', text: 'Network error while removing.' });
+    } finally {
+      setFalRemoving(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-full p-8 flex items-center justify-center bg-surface">
+      <div className="h-full flex items-center justify-center bg-surface">
         <DashboardCenterSpinner />
       </div>
     );
   }
 
   return (
-    <div className="min-h-full p-8 bg-surface">
+    <div className="h-full overflow-y-auto p-8 bg-surface">
       <div className="max-w-3xl mx-auto">
         <div className="mb-8">
           <Link
@@ -164,15 +209,27 @@ export default function AccountPage() {
         <AccountProfileCard user={user} />
 
         <AccountOpenAiKeyCard
-          keyStatus={keyStatus}
-          keyLoading={keyLoading}
-          keyMessage={keyMessage}
-          newKey={newKey}
-          onNewKeyChange={setNewKey}
-          saving={saving}
-          removing={removing}
-          onSave={saveKey}
-          onRemove={removeKey}
+          keyStatus={openaiKeyStatus}
+          keyLoading={openaiKeyLoading}
+          keyMessage={openaiKeyMessage}
+          newKey={openaiNewKey}
+          onNewKeyChange={setOpenaiNewKey}
+          saving={openaiSaving}
+          removing={openaiRemoving}
+          onSave={saveOpenaiKey}
+          onRemove={removeOpenaiKey}
+        />
+
+        <AccountFalKeyCard
+          keyStatus={falKeyStatus}
+          keyLoading={falKeyLoading}
+          keyMessage={falKeyMessage}
+          newKey={falNewKey}
+          onNewKeyChange={setFalNewKey}
+          saving={falSaving}
+          removing={falRemoving}
+          onSave={saveFalKey}
+          onRemove={removeFalKey}
         />
 
         <div className="mt-8 rounded-xl border border-red-200 bg-red-50/50 p-6">

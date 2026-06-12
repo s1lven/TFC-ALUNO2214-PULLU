@@ -11,6 +11,7 @@ import { HugeiconsIcon } from '@hugeicons/react';
 import { DownloadFreeIcons, PlusSignFreeIcons, SparklesFreeIcons, DeleteFreeIcons, CancelFreeIcons, ArrowExpandDiagonal01FreeIcons } from '@hugeicons/core-free-icons';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { LANGUAGES } from '@/lib/dashboard/languages';
+import ImageGenerator from '@/components/dashboard/image-generator';
 
 export default function ProductImport({
   productData,
@@ -102,6 +103,7 @@ export default function ProductImport({
   const [lightboxEditName, setLightboxEditName] = React.useState('');
   const [lightboxEditAlt, setLightboxEditAlt] = React.useState('');
   const [showSkuPanel, setShowSkuPanel] = React.useState(false);
+  const [showImageGenerator, setShowImageGenerator] = React.useState(false);
 
   const getImageFilename = (src: string): string => {
     try {
@@ -561,6 +563,17 @@ export default function ProductImport({
 
   return (
     <>
+    {showImageGenerator && (
+      <ImageGenerator
+        productImages={editableImages}
+        currentImageCount={editableImages.length}
+        onImagesAdded={(newImages) => {
+          setEditableImages((prev) => [...prev, ...newImages]);
+        }}
+        onClose={() => setShowImageGenerator(false)}
+        onSuccess={(msg) => setTranslationStatus({ type: 'success', message: msg })}
+      />
+    )}
     {lightboxIndex !== null && editableImages[lightboxIndex] && (() => {
       const img = editableImages[lightboxIndex];
       const ext = getImageFilename(img.src).split('.').pop()?.toUpperCase() || 'IMG';
@@ -631,7 +644,7 @@ export default function ProductImport({
                     updated[lightboxIndex] = { ...updated[lightboxIndex], name: e.target.value };
                     setEditableImages(updated);
                   }}
-                  className="w-full bg-white/10 border border-white/15 rounded-md px-3 py-1.5 text-xs text-white placeholder-white/30 outline-none focus:border-white/40 transition-colors"
+                  className="w-full bg-white/10 border border-white/15 rounded-md px-3 py-1.5 text-xs text-white placeholder-white/30 outline-none transition-colors"
                   placeholder="Image name"
                 />
               </div>
@@ -646,7 +659,7 @@ export default function ProductImport({
                     updated[lightboxIndex] = { ...updated[lightboxIndex], alt: e.target.value };
                     setEditableImages(updated);
                   }}
-                  className="w-full bg-white/10 border border-white/15 rounded-md px-3 py-1.5 text-xs text-white placeholder-white/30 outline-none focus:border-white/40 transition-colors"
+                  className="w-full bg-white/10 border border-white/15 rounded-md px-3 py-1.5 text-xs text-white placeholder-white/30 outline-none transition-colors"
                   placeholder="Describe this image"
                 />
               </div>
@@ -705,7 +718,7 @@ export default function ProductImport({
                   value={enhancementPrompt}
                   onChange={(e) => setEnhancementPrompt(e.target.value)}
                   placeholder="e.g., Make it more persuasive, add emoji, improve SEO..."
-                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2 text-xs text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full bg-gray-50 border border-gray-300 rounded-md p-2 text-xs text-gray-900 resize-none outline-none"
                   rows={3}
                 />
                 <p className="text-xs text-gray-500 mt-1.5">
@@ -797,7 +810,7 @@ export default function ProductImport({
                     value={editableSeoDescription}
                     onChange={(e) => setEditableSeoDescription(e.target.value)}
                     rows={2}
-                    className="w-full bg-white border border-gray-300 text-gray-900 rounded-md px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-gray-300 focus:border-transparent"
+                    className="w-full bg-white border border-gray-300 text-gray-900 rounded-md px-3 py-2 text-sm resize-none outline-none"
                     placeholder="Meta description"
                   />
                 </div>
@@ -861,6 +874,15 @@ export default function ProductImport({
                     <p className="text-xs text-gray-500 mt-0.5">Drag to reorder</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* Generate with AI */}
+                    <button
+                      onClick={() => setShowImageGenerator(true)}
+                      className="text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-md px-2 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 shadow-sm"
+                    >
+                      <HugeiconsIcon icon={SparklesFreeIcons} size={14} />
+                      <span>Generate with AI</span>
+                    </button>
+
                     {/* Upload Button */}
                     <label className="cursor-pointer">
                       <input
@@ -885,10 +907,10 @@ export default function ProductImport({
                         )}
                       </div>
                     </label>
-                    
+
                     {/* Download Button */}
                     {editableImages && editableImages.length > 0 && (
-                      <button 
+                      <button
                         onClick={downloadAllImages}
                         disabled={downloadingImages}
                         className="text-gray-700 hover:text-gray-900 bg-white hover:bg-gray-50 border border-gray-300 rounded-md px-2 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"

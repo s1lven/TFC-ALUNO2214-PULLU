@@ -16,26 +16,20 @@ function maskLastFour(secret: string): string {
 export async function GET() {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return jsonError('Unauthorized', 401);
-    if (!checkRateLimit(`openai-key-get:${user.id}`, 30)) return jsonError('Too many requests. Please slow down.', 429);
+    if (!checkRateLimit(`fal-key-get:${user.id}`, 30)) return jsonError('Too many requests. Please slow down.', 429);
 
     const admin = createServiceClient();
-    const { data, error } = await admin
+    const { data } = await admin
       .from('user_ai_credentials')
-      .select('openai_key_last_four')
+      .select('falai_key_last_four')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (error) {
-      return jsonError('Could not load API key status', 500);
-    }
-
-    const configured = Boolean(data?.openai_key_last_four);
-    return jsonOk({ configured, lastFour: configured ? data!.openai_key_last_four : null });
-  } catch (e) {
+    const configured = Boolean(data?.falai_key_last_four);
+    return jsonOk({ configured, lastFour: configured ? data!.falai_key_last_four : null });
+  } catch {
     return jsonError('Server configuration error (service role or database).', 500);
   }
 }
@@ -45,7 +39,7 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return jsonError('Unauthorized', 401);
-    if (!checkRateLimit(`openai-key-post:${user.id}`, 10)) return jsonError('Too many requests. Please slow down.', 429);
+    if (!checkRateLimit(`fal-key-post:${user.id}`, 10)) return jsonError('Too many requests. Please slow down.', 429);
 
     const body = await request.json().catch(() => null);
     const apiKey = typeof body?.apiKey === 'string' ? body.apiKey.trim() : '';
@@ -55,16 +49,14 @@ export async function POST(request: Request) {
     const lastFour = maskLastFour(apiKey);
     const admin = createServiceClient();
     const { error } = await admin.from('user_ai_credentials').upsert(
-      { user_id: user.id, openai_api_key: encrypt(apiKey), openai_key_last_four: lastFour, updated_at: new Date().toISOString() },
+      { user_id: user.id, falai_api_key: encrypt(apiKey), falai_key_last_four: lastFour, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' },
     );
 
-    if (error) {
-      return jsonError('Could not save API key', 500);
-    }
+    if (error) return jsonError('Could not save API key', 500);
 
     return jsonSuccess({ lastFour });
-  } catch (e) {
+  } catch {
     return jsonError('Server configuration error (service role or database).', 500);
   }
 }
@@ -74,20 +66,18 @@ export async function DELETE() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return jsonError('Unauthorized', 401);
-    if (!checkRateLimit(`openai-key-delete:${user.id}`, 5)) return jsonError('Too many requests. Please slow down.', 429);
+    if (!checkRateLimit(`fal-key-delete:${user.id}`, 5)) return jsonError('Too many requests. Please slow down.', 429);
 
     const admin = createServiceClient();
     const { error } = await admin
       .from('user_ai_credentials')
-      .update({ openai_api_key: null, openai_key_last_four: null, updated_at: new Date().toISOString() })
+      .update({ falai_api_key: null, falai_key_last_four: null, updated_at: new Date().toISOString() })
       .eq('user_id', user.id);
 
-    if (error) {
-      return jsonError('Could not remove API key', 500);
-    }
+    if (error) return jsonError('Could not remove API key', 500);
 
     return jsonSuccess({});
-  } catch (e) {
+  } catch {
     return jsonError('Server configuration error (service role or database).', 500);
   }
 }
