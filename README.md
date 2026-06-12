@@ -37,12 +37,12 @@ Go to [supabase.com](https://supabase.com), create a new project, then run the f
 
 ```sql
 CREATE TABLE public.shopify_stores (
+  store_name text,
   id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
   user_id uuid DEFAULT auth.uid(),
   shopify_store_url text,
   shopify_token text,
   created_at timestamp with time zone NOT NULL DEFAULT now(),
-  store_name text,
   store_alias text,
   shopify_client_id text,
   shopify_client_secret text,
@@ -52,18 +52,33 @@ CREATE TABLE public.shopify_stores (
   CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
 
-CREATE TABLE public.user_openai_credentials (
-  user_id uuid NOT NULL,
-  api_key text NOT NULL,
-  key_last_four text NOT NULL,
+CREATE TABLE public.user_ai_credentials (
   created_at timestamp with time zone NOT NULL DEFAULT now(),
   updated_at timestamp with time zone NOT NULL DEFAULT now(),
-  CONSTRAINT user_openai_credentials_pkey PRIMARY KEY (user_id),
-  CONSTRAINT user_openai_credentials_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+  user_id uuid NOT NULL,
+  openai_api_key text,
+  openai_key_last_four text,
+  falai_api_key text,
+  falai_key_last_four text,
+  CONSTRAINT user_ai_credentials_pkey PRIMARY KEY (user_id),
+  CONSTRAINT user_ai_credentials_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+
+CREATE TABLE public.import_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  store_id bigint NOT NULL,
+  type text NOT NULL,
+  status text NOT NULL,
+  source_url text,
+  payload jsonb,
+  error text,
+  CONSTRAINT import_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT import_logs_store_id_fkey FOREIGN KEY (store_id) REFERENCES public.shopify_stores(id)
 );
 ```
 
-Then enable **Row Level Security** on both tables and add the following policies:
+Then enable **Row Level Security** on all tables and add the following policies:
 
 ```sql
 -- shopify_stores: users can only see and modify their own rows
@@ -73,12 +88,23 @@ CREATE POLICY "Users manage their own stores"
 ON public.shopify_stores
 FOR ALL USING (auth.uid() = user_id);
 
--- user_openai_credentials: users can only see and modify their own row
-ALTER TABLE public.user_openai_credentials ENABLE ROW LEVEL SECURITY;
+-- user_ai_credentials: users can only see and modify their own row
+ALTER TABLE public.user_ai_credentials ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users manage their own credentials"
-ON public.user_openai_credentials
+CREATE POLICY "Users manage their own AI credentials"
+ON public.user_ai_credentials
 FOR ALL USING (auth.uid() = user_id);
+
+-- import_logs: users can only see logs for stores they own
+ALTER TABLE public.import_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users view logs for their own stores"
+ON public.import_logs
+FOR ALL USING (
+  store_id IN (
+    SELECT id FROM public.shopify_stores WHERE user_id = auth.uid()
+  )
+);
 ```
 
 ### 3. Enable Google OAuth (optional)
